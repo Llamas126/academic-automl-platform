@@ -1,0 +1,46 @@
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    app_name: str = "Academic AutoML Platform"
+    app_version: str = "0.1.0"
+    api_v1_prefix: str = "/api/v1"
+    debug: bool = False
+
+    data_dir: Path = Path("data")
+    max_upload_mb: int = 200
+
+    redis_url: str = "redis://localhost:6379/0"
+    job_store_backend: Literal["redis", "memory"] = "redis"
+    celery_eager: bool = False
+
+    default_random_state: int = 42
+    figures_dpi: int = 300
+    shap_background_samples: int = 100
+    shap_max_eval_rows: int = 500
+    pdf_engine: Literal["auto", "tectonic", "none"] = "auto"
+
+    @property
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
+    @property
+    def jobs_dir(self) -> Path:
+        return self.data_dir / "jobs"
+
+    def ensure_dirs(self) -> None:
+        self.uploads_dir.mkdir(parents=True, exist_ok=True)
+        self.jobs_dir.mkdir(parents=True, exist_ok=True)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    settings = Settings()
+    settings.ensure_dirs()
+    return settings
