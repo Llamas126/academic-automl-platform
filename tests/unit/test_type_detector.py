@@ -24,10 +24,11 @@ def test_numeric_dtype_detected():
 
 
 def test_string_numbers_coerced_to_numeric():
-    role, converted, excluded = detect_column_role(_series(["1", "2", "3", "4", "x"]))
+    values = [str(float(i)) for i in range(18)] + ["x"]
+    role, converted, excluded = detect_column_role(_series(values))
     assert role == ColumnRole.numeric
     assert not excluded
-    assert converted.isna().sum() == 1
+    assert int(converted.isna().sum()) == 1
 
 
 def test_datetime_strings_detected():
@@ -82,11 +83,11 @@ def test_profile_dataframe_shape_and_suggestions():
     )
     profile = profile_dataframe(df, dataset_id="ds_test", filename="t.csv")
     assert profile.n_rows == 120 and profile.n_cols == 4
-    roles = {c.name: c.role for c in profile.columns}
-    assert roles["price"] == ColumnRole.numeric
-    assert roles["quality"] == ColumnRole.categorical
-    assert roles["record_id"] == ColumnRole.identifier
-    tasks = {s.name: s.suggested_task for s in suggest_targets(df, roles)}
+    role_map = {c.name: (c.role, c.excluded_from_features) for c in profile.columns}
+    assert role_map["price"][0] == ColumnRole.numeric
+    assert role_map["quality"][0] == ColumnRole.categorical
+    assert role_map["record_id"][0] == ColumnRole.identifier
+    tasks = {s.name: s.suggested_task for s in suggest_targets(df, role_map)}
     assert tasks["price"] == "regression"
     assert tasks["quality"] == "classification"
 
@@ -109,9 +110,13 @@ def test_infer_target_task_rejects_single_class():
     assert not task and error
 
 
-def test_assert_finite_targets_rejects_nan_regression():
+def test_assert_finite_targets_allows_missing_rows():
+    assert_finite_targets(pd.Series([1.0, np.nan, 3.0]), "regression")
+
+
+def test_assert_finite_targets_rejects_non_numeric_regression():
     with pytest.raises(ValueError):
-        assert_finite_targets(pd.Series([1.0, np.nan, 3.0]), "regression")
+        assert_finite_targets(pd.Series(["1", "abc", "3"]), "regression")
 
 
 def test_assert_finite_targets_rejects_inf_regression():

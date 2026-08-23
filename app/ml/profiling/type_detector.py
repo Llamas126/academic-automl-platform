@@ -93,7 +93,10 @@ def detect_column_role(series: pd.Series) -> tuple[ColumnRole, pd.Series, bool]:
 
     n_rows = len(series)
     n_unique = int(series.nunique(dropna=True))
-    if n_unique / max(non_null_count, 1) >= 0.95 and n_rows >= 20:
+    as_str = series.dropna().astype(str)
+    looks_atomic = (~as_str.str.contains(r"\s", regex=True)).mean() >= 0.95
+    unique_ratio = n_unique / max(non_null_count, 1)
+    if unique_ratio >= 0.95 and n_rows >= 20 and looks_atomic and as_str.str.len().mean() <= 64:
         return ColumnRole.identifier, series, True
 
     threshold = max(50, 0.05 * n_rows)
@@ -250,11 +253,10 @@ def infer_target_task(series: pd.Series) -> tuple[str, str]:
 
 
 def assert_finite_targets(y: pd.Series, task: str) -> None:
-    values = y.dropna()
-    if task == "regression":
-        arr = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
-        if np.isnan(arr).any():
-            raise ValueError(f"target '{y.name}' contains non-numeric values")
-        finite = np.isfinite(arr)
-        if not finite.all():
-            raise ValueError(f"target '{y.name}' contains infinite values")
+    if task != "regression":
+        return
+    arr = pd.to_numeric(y.dropna(), errors="coerce").to_numpy(dtype=float)
+    if np.isnan(arr).any():
+        raise ValueError(f"target '{y.name}' contains non-numeric values")
+    if not np.isfinite(arr).all():
+        raise ValueError(f"target '{y.name}' contains infinite values")
