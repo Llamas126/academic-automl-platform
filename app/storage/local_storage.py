@@ -10,8 +10,9 @@ def new_id(prefix: str) -> str:
 
 
 class LocalStorage:
-    def __init__(self) -> None:
-        self.settings = get_settings()
+    @property
+    def settings(self):
+        return get_settings()
 
     @property
     def uploads_dir(self) -> Path:

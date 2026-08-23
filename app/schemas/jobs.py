@@ -1,10 +1,10 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class JobState(str, Enum):
+class JobState(StrEnum):
     PENDING = "PENDING"
     STARTED = "STARTED"
     PROGRESS = "PROGRESS"

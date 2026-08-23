@@ -48,9 +48,7 @@ def ingest_dataset(filename: str, content: bytes) -> DatasetProfile:
         )
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if len(content) > max_bytes:
-        raise ValidationFailedError(
-            f"file exceeds upload limit of {settings.max_upload_mb} MB"
-        )
+        raise ValidationFailedError(f"file exceeds upload limit of {settings.max_upload_mb} MB")
 
     dataset_id, path = storage.save_upload(filename, content)
     try:

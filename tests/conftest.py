@@ -2,17 +2,22 @@ import os
 
 import pytest
 
+os.environ.setdefault("JOB_STORE_BACKEND", "memory")
+os.environ.setdefault("CELERY_EAGER", "true")
+
 
 @pytest.fixture
 def isolated_data_dir(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
-    os.environ["DATA_DIR"] = str(data_dir)
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
     from app.core.config import get_settings
+    from app.services.job_service import reset_job_store
 
     get_settings.cache_clear()
+    reset_job_store()
     yield data_dir
     get_settings.cache_clear()
-    os.environ.pop("DATA_DIR", None)
+    reset_job_store()
 
 
 @pytest.fixture

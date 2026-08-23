@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class ColumnRole(str, Enum):
+class ColumnRole(StrEnum):
     numeric = "numeric"
     categorical = "categorical"
     boolean = "boolean"

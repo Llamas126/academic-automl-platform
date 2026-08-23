@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+from datetime import UTC
 
 import numpy as np
 import pandas as pd
@@ -77,8 +78,20 @@ def detect_column_role(series: pd.Series) -> tuple[ColumnRole, pd.Series, bool]:
             series.astype(str)
             .str.strip()
             .str.lower()
-            .map({"true": True, "false": False, "yes": True, "no": False,
-                  "si": True, "sí": True, "y": True, "n": False, "t": True, "f": False})
+            .map(
+                {
+                    "true": True,
+                    "false": False,
+                    "yes": True,
+                    "no": False,
+                    "si": True,
+                    "sí": True,
+                    "y": True,
+                    "n": False,
+                    "t": True,
+                    "f": False,
+                }
+            )
         )
         if mapped.notna().all():
             return ColumnRole.boolean, mapped.astype("boolean"), False
@@ -141,18 +154,12 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: str, filename: str) -> Datas
         )
 
     suggestions = suggest_targets(df, roles)
-    total_cells = df.shape[0] * df.shape[1]
-    missing_total_pct = (
-        round(float(df.isna().to_numpy().sum()) / max(total_cells, 1) * 100, 2)
-        if total_cells
-        else 0.0
-    )
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return DatasetProfile(
         dataset_id=dataset_id,
         filename=filename,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         n_rows=int(df.shape[0]),
         n_cols=int(df.shape[1]),
         columns=columns,
@@ -160,9 +167,7 @@ def profile_dataframe(df: pd.DataFrame, dataset_id: str, filename: str) -> Datas
     )
 
 
-def suggest_targets(
-    df: pd.DataFrame, roles: dict[str, tuple[ColumnRole, bool]]
-) -> list[TargetSuggestion]:
+def suggest_targets(df: pd.DataFrame, roles: dict[str, tuple[ColumnRole, bool]]) -> list[TargetSuggestion]:
     suggestions: list[TargetSuggestion] = []
     for name, (role, excluded) in roles.items():
         if excluded or role not in (ColumnRole.numeric, ColumnRole.categorical, ColumnRole.boolean):

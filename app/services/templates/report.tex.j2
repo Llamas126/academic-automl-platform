@@ -1,0 +1,81 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black]{hyperref}
+\usepackage{caption}
+
+\title{Automated Machine Learning Analysis Report}
+\author{academic-automl-platform}
+\date{ {{ reportdate }} }
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report summarizes an automated machine learning analysis performed on a
+tabular dataset of {{ nsamples }} observations and {{ nfeatures }} candidate
+predictor variables. {{ ntargets }} target variable{{ targetplural }} were
+modeled under {{ cvmode }} {{ nfolds }}-fold cross-validation, comparing
+{{ nmodels }} algorithms. The best configuration for each target was refit on
+the full data; out-of-fold predictions ship alongside this report together
+with LaTeX table sources, publication-quality figures, trained model
+artifacts, and a complete software manifest.
+\end{abstract}
+
+\section{Data and Experimental Protocol}
+The dataset contains {{ nsamples }} rows after removing rows with missing
+target values; {{ nfeaturesused }} usable predictor columns were retained.
+Preprocessing is embedded in each pipeline: median/most-frequent imputation
+inside a \texttt{ColumnTransformer}, one-hot encoding with rare-level grouping
+(\texttt{min\_frequency}=0.01) for categoricals, and optional standardization.
+
+Model comparison uses {{ cvmode }} cross-validation: outer folds estimate
+generalization performance, while inner folds tune hyperparameters via Optuna
+(TPE sampler)~\citep{akiba2019optuna}. All folds share identical row
+partitions across targets so predictions remain comparable. Reported metrics
+aggregate out-of-fold test scores as mean $\pm$ standard deviation across
+folds; the primary metric is \texttt{ {{ primarymetric }} }.
+
+Algorithms compared: {{ algorithmlist }}. Core estimators:
+\citep{pedregosa2011scikit}; gradient boosting:
+\citep{chen2016xgboost,ke2017lightgbm}. Model inspection:
+\citep{lundberg2017shap}. Supporting libraries:
+\citep{harris2020array,mckinney2010data,hunter2007matplotlib,waskom2021seaborn}.
+
+\section{Results}
+{% for result in results %}
+\subsection{Target: \texttt{ {{ result.target }} } ({{ result.task }})}
+Selected model: \textbf{ {{ result.best_model }} }; tuned hyperparameters:
+{{ result.best_params_tex }}.
+
+{{ result.table }}
+{% if result.figures %}
+\begin{figure}[htbp]
+\centering
+{% for fig in result.figures %}\includegraphics[width=0.48\textwidth]{ {{ fig }} }
+{% endfor %}
+\caption{Out-of-fold diagnostics for target {{ result.target }}
+(selected model).}
+\end{figure}
+{% endif %}
+{% if result.shap_note %}
+\emph{Explainability:} {{ result.shap_note }}
+{% endif %}
+{% endfor %}
+
+{% if warnings %}
+\section*{Run Warnings}
+\begin{itemize}
+{% for w in warnings %}\item {{ w }}
+{% endfor %}
+\end{itemize}
+{% endif %}
+
+\bibliographystyle{plain}
+\bibliography{../bib/references}
+
+\end{document}

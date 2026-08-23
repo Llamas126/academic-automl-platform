@@ -12,6 +12,9 @@ target-version = "py313"
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+"app/services/bibtex_service.py" = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

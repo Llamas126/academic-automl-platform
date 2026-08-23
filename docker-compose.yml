@@ -1,0 +1,37 @@
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOB_STORE_BACKEND: redis
+      CELERY_EAGER: "false"
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOB_STORE_BACKEND: redis
+      CELERY_EAGER: "false"
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
