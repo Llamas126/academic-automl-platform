@@ -14,13 +14,18 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     mem_limit: 256m
     cpus: 0.5
     networks:
       - automl
 
   api:
-    build: .
+    build:
+      context: .
+      target: runtime
     ports:
       - "8000:8000"
     environment:
@@ -37,6 +42,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -48,7 +59,9 @@ services:
       - automl
 
   worker:
-    build: .
+    build:
+      context: .
+      target: runtime
     command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=2
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -73,7 +86,9 @@ services:
       - automl
 
   beat:
-    build: .
+    build:
+      context: .
+      target: runtime
     command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -91,6 +106,23 @@ services:
       - ALL
     mem_limit: 256m
     cpus: 0.5
+    networks:
+      - automl
+
+  tests:
+    build:
+      context: .
+      target: test
+    profiles:
+      - test
+    command: ["pytest", "tests", "-q"]
+    environment:
+      JOB_STORE_BACKEND: memory
+      CELERY_EAGER: "true"
+      DATA_DIR: /app/data
+    restart: "no"
+    healthcheck:
+      disable: true
     networks:
       - automl
 

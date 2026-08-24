@@ -25,12 +25,38 @@ Backend asíncrono de AutoML para investigación académica: ingesta de tablas C
 
 ## Arranque rápido (Docker)
 
-```bash
-docker compose up --build
-# API en http://localhost:8000 — docs en /docs
+Único requisito: Docker (Desktop) con Compose v2 en ejecución.
+
+```powershell
+# Windows
+.\run.ps1
 ```
 
-El worker incluye Tectonic para compilar el PDF; sin motor LaTeX el paquete se entrega igualmente con las fuentes `.tex`. El servicio `beat` programa la tarea `maintenance.cleanup` (limpieza TTL de `DATA_DIR`).
+```bash
+# Linux / macOS (chmod +x run.sh la primera vez)
+./run.sh
+```
+
+El script, sin configuración manual previa: crea `.env` desde `.env.example` con una
+`REDIS_PASSWORD` aleatoria si falta (nunca sobrescribe una existente), valida que el motor Docker
+esté activo, construye y levanta `api`, `worker`, `beat` y `redis`, y espera hasta que el
+healthcheck responda en `http://localhost:8000/api/v1/health`.
+
+| Flag | Efecto |
+|---|---|
+| `-Test` / `--test` | Ejecuta antes la suite completa (112 tests) en un contenedor efímero y aborta el despliegue si falla |
+| `-SkipBuild` / `--skip-build` | Arranca reutilizando imágenes ya construidas |
+| `-Down` / `--down` | Detiene el stack |
+
+```powershell
+.\run.ps1 -Test   # validar suite en contenedor + desplegar
+.\run.ps1 -Down   # parar todo (o: docker compose down)
+```
+
+El worker incluye Tectonic para compilar el PDF; sin motor LaTeX el paquete se entrega igualmente
+con las fuentes `.tex`. El servicio `beat` programa la tarea `maintenance.cleanup` (limpieza TTL de
+`DATA_DIR`). Si la API no responde en 120 s, los scripts vuelcan diagnóstico automático (`ps` +
+últimos logs).
 
 ## Arranque local (sin Docker)
 
