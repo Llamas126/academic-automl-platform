@@ -89,11 +89,13 @@ services:
     build:
       context: .
       target: runtime
-    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
+    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO --schedule /app/data/celerybeat-schedule
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JOB_STORE_BACKEND: redis
       CELERY_EAGER: "false"
+    volumes:
+      - ./data:/app/data
     depends_on:
       redis:
         condition: service_healthy
