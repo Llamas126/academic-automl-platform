@@ -67,18 +67,18 @@ if ($Test) {
     }
 }
 
-Write-Step "Building and starting stack (api, worker, beat, redis)"
+Write-Step "Building and starting stack (gateway, ingestion, mlcore, inference, workers, redis)"
 $upArgs = @("compose", "up", "-d")
 if (-not $SkipBuild) { $upArgs += "--build" }
 & docker @upArgs
 if ($LASTEXITCODE -ne 0) { Write-Fail "docker compose up failed."; exit 2 }
 
-Write-Step "Waiting for API health at http://localhost:8000/api/v1/health"
+Write-Step "Waiting for gateway health at http://localhost:8000/health"
 $deadline = (Get-Date).AddSeconds(120)
 $healthy = $false
 while ((Get-Date) -lt $deadline) {
     try {
-        $response = Invoke-WebRequest -Uri "http://localhost:8000/api/v1/health" -UseBasicParsing -TimeoutSec 3
+        $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing -TimeoutSec 3
         if ($response.StatusCode -eq 200) { $healthy = $true; break }
     } catch {
         # not ready yet
@@ -90,7 +90,7 @@ Write-Host ""
 if (-not $healthy) {
     Write-Fail "API did not become healthy within 120 seconds. Diagnostics:"
     docker compose ps
-    docker compose logs --tail 50 api
+    docker compose logs --tail 50 gateway
     exit 4
 }
 Write-Host "    API is healthy."
@@ -99,9 +99,9 @@ docker compose ps
 Write-Host @"
 
 Stack ready:
-  API   : http://localhost:8000
-  Docs  : http://localhost:8000/docs
-  Stop  : .\run.ps1 -Down   (or: docker compose down)
+  Gateway : http://localhost:8000
+  Docs    : http://localhost:8000/docs
+  Stop    : .\run.ps1 -Down   (or: docker compose down)
 
 Auth and rate limiting are disabled by default; see .env to enable them.
 "@ -ForegroundColor Green

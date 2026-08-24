@@ -4,6 +4,11 @@ import pytest
 
 os.environ.setdefault("JOB_STORE_BACKEND", "memory")
 os.environ.setdefault("CELERY_EAGER", "true")
+os.environ.setdefault("AUTOML_CELERY_SHARED_APP", "1")
+
+# Collapse every service Celery app into the shared registry up front so
+# eager-mode chains can resolve train/explain/export task names immediately.
+import app.tasks.celery_app  # noqa: E402,F401
 
 
 @pytest.fixture

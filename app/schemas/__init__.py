@@ -1,7 +1,7 @@
-from app.schemas.dataset import ColumnProfile, ColumnRole, DatasetProfile, TargetSuggestion
-from app.schemas.jobs import JobCreated, JobState, JobStatus
-from app.schemas.results import MetricAggregate, ModelResult, RunSummary, TargetResults
-from app.schemas.training import (
+from automl_shared.schemas.jobs import JobCreated, JobState, JobStatus
+from automl_shared.schemas.predict import PredictRecordsRequest, PredictResponse, PredictTargetMeta
+from automl_shared.schemas.results import MetricAggregate, ModelResult, RunSummary, TargetResults
+from automl_shared.schemas.training import (
     CVConfig,
     ExplainConfig,
     ExportConfig,
@@ -23,6 +23,9 @@ __all__ = [
     "JobStatus",
     "MetricAggregate",
     "ModelResult",
+    "PredictRecordsRequest",
+    "PredictResponse",
+    "PredictTargetMeta",
     "RunSummary",
     "TargetIn",
     "TargetResults",

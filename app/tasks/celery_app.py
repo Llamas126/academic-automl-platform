@@ -1,40 +1,18 @@
-from __future__ import annotations
+﻿"""Composite Celery app for the composable monolith (tests / single-node).
 
-from celery import Celery
+In production each service builds its own app; with AUTOML_CELERY_SHARED_APP
+set this instance collapses into the shared registry so eager chains resolve
+every task name.
+"""
+from automl_shared.celery_runtime import build_app
 
-from app.core.config import get_settings
-
-settings = get_settings()
-
-celery_app = Celery(
-    "academic_automl",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
-    include=["app.tasks.train_tasks", "app.tasks.maintenance_tasks"],
+celery_app = build_app(
+    "automl_composite",
+    include=[
+        "mlcore.worker.train_tasks",
+        "mlcore.worker.maintenance_tasks",
+        "explainability.worker.tasks",
+        "exporter.worker.tasks",
+    ],
 )
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    broker_connection_retry_on_startup=True,
-    result_expires=7 * 24 * 3600,
-    worker_max_tasks_per_child=8,
-)
-
-if settings.cleanup_enabled:
-    from datetime import timedelta
-
-    celery_app.conf.beat_schedule = {
-        "cleanup-expired-artifacts": {
-            "task": "maintenance.cleanup",
-            "schedule": timedelta(minutes=settings.cleanup_interval_minutes),
-        }
-    }
-
-if settings.celery_eager:
-    celery_app.conf.task_always_eager = True
-    celery_app.conf.task_eager_propagates = False

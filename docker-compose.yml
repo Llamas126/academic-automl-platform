@@ -22,13 +22,13 @@ services:
     networks:
       - automl
 
-  api:
+  gateway:
     build:
       context: .
-      target: runtime
+      dockerfile: services/gateway/Dockerfile
     ports:
       - "8000:8000"
-    environment:
+    environment: &base_env
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JOB_STORE_BACKEND: redis
       CELERY_EAGER: "false"
@@ -37,13 +37,68 @@ services:
       AUTH_ENABLED: ${AUTH_ENABLED:-false}
       API_KEYS: ${API_KEYS:-}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-false}
+      INGESTION_SERVICE_URL: http://ingestion:8000
+      MLCORE_SERVICE_URL: http://mlcore-api:8000
+      INFERENCE_SERVICE_URL: http://inference:8000
     volumes:
       - ./data:/app/data
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    cpus: "1.0"
+    networks:
+      - automl
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    environment: *base_env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: "1.0"
+    networks:
+      - automl
+
+  mlcore-api:
+    build:
+      context: .
+      dockerfile: services/ml-core/Dockerfile
+    environment: *base_env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -58,16 +113,12 @@ services:
     networks:
       - automl
 
-  worker:
+  mlcore-worker:
     build:
       context: .
-      target: runtime
-    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=2
-    environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      JOB_STORE_BACKEND: redis
-      CELERY_EAGER: "false"
-      DATA_DIR: /app/data
+      dockerfile: services/ml-core/Dockerfile
+    command: celery -A mlcore.worker.celery_app.celery_app worker --loglevel=INFO --concurrency=2 -Q ml.training,maintenance
+    environment: *base_env
     volumes:
       - ./data:/app/data
     depends_on:
@@ -85,15 +136,12 @@ services:
     networks:
       - automl
 
-  beat:
+  mlcore-beat:
     build:
       context: .
-      target: runtime
-    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO --schedule /app/data/celerybeat-schedule
-    environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      JOB_STORE_BACKEND: redis
-      CELERY_EAGER: "false"
+      dockerfile: services/ml-core/Dockerfile
+    command: celery -A mlcore.worker.celery_app.celery_app beat --loglevel=INFO --schedule /app/data/celerybeat-schedule
+    environment: *base_env
     volumes:
       - ./data:/app/data
     depends_on:
@@ -111,17 +159,113 @@ services:
     networks:
       - automl
 
+  explain-worker:
+    build:
+      context: .
+      dockerfile: services/explainability/Dockerfile
+    environment: *base_env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 4g
+    cpus: "2.0"
+    networks:
+      - automl
+
+  export-worker:
+    build:
+      context: .
+      dockerfile: services/exporter/Dockerfile
+    environment: *base_env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 3g
+    cpus: "2.0"
+    networks:
+      - automl
+
+  inference:
+    build:
+      context: .
+      dockerfile: services/inference/Dockerfile
+    environment: *base_env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    cpus: "1.0"
+    networks:
+      - automl
+
   tests:
     build:
       context: .
       target: test
     profiles:
       - test
-    command: ["pytest", "tests", "-q"]
+    command: ["pytest", "tests", "-q", "-p", "no:warnings"]
     environment:
       JOB_STORE_BACKEND: memory
       CELERY_EAGER: "true"
       DATA_DIR: /app/data
+    restart: "no"
+    healthcheck:
+      disable: true
+    networks:
+      - automl
+
+  tier2:
+    build:
+      context: .
+      target: test
+    profiles:
+      - tier2
+    command: ["pytest", "tests/compose", "-q", "-p", "no:warnings"]
+    environment:
+      RUN_TIER2: "1"
+      GATEWAY_URL: http://gateway:8000
+      TIER2_POLL_TIMEOUT: "420"
+    depends_on:
+      gateway:
+        condition: service_healthy
+      ingestion:
+        condition: service_healthy
+      mlcore-api:
+        condition: service_healthy
+      inference:
+        condition: service_healthy
     restart: "no"
     healthcheck:
       disable: true

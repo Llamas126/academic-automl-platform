@@ -22,6 +22,9 @@ RUN useradd --create-home appuser
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install -r requirements.txt
 
+COPY --chown=appuser:appuser packages/shared ./packages/shared
+RUN pip install --no-cache-dir --no-deps ./packages/shared
+
 COPY --chown=appuser:appuser . .
 
 USER appuser

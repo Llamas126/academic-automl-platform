@@ -4,11 +4,21 @@ Backend asíncrono de AutoML para investigación académica: ingesta de tablas C
 
 ## Arquitectura
 
-- **API**: FastAPI (`app/main.py`), rutas en `app/api/v1/`
-- **Tareas**: Celery + Redis (`app/tasks/`); fallback a ejecución eager + job store en memoria cuando Redis no está disponible; beat programado para limpieza TTL de artefactos
-- **Seguridad**: middleware ligero opt-in (`app/core/security.py`): API key para mutaciones y rate limit en-proceso
-- **Núcleo ML**: `app/ml/` (profiling, preprocesado, registry de modelos, K-Fold compartido, métricas IC95%, Optuna, multi-target, pipeline)
-- **Exportación científica**: `app/services/` (figuras, LaTeX booktabs, BibTeX, reporte Jinja→Tectonic, empaquetado ZIP+MANIFEST)
+Microservicios desacoplados que comparten un paquete común (`packages/shared/automl_shared`) y un volumen de datos; el punto de entrada único es el gateway:
+
+| Servicio | Paquete | Responsabilidad |
+|---|---|---|
+| **gateway** | `services/gateway` | Proxy HTTP a los servicios internos, API key, rate limit (Redis sliding-window), security headers |
+| **ingestion** | `services/ingestion` | Subida CSV/XLSX, profiling y sugerencia de targets |
+| **mlcore** | `services/ml-core` | Entrenamiento (Optuna, CV anidada, multi-target), orquestación de la cadena Celery `train → explain → export`, limpieza TTL (beat) |
+| **explainability** | `services/explainability` | Figuras SHAP desde el contrato de entrenamiento persistido |
+| **exporter** | `services/exporter` | Bundle científico: figuras, tablas LaTeX, BibTeX, reporte PDF/Tectonic, ZIP+MANIFEST |
+| **inference** | `services/inference` | Predicción con los modelos `.joblib` de un run |
+
+- **Contrato entre servicios**: mlcore persiste en `data/jobs/<id>/work` (`training_meta.json`, `background.csv`, `eval_*.npz`) y `out` (métricas, modelos firmados); explainability y exporter son consumidores puros de esos archivos — no se conocen entre sí
+- **Colas Celery**: `ml.training`, `explain.shap`, `export.package`, `maintenance`; guardia de etapas evita propagación cuando un eslabón falla
+- **Compatibilidad**: el monolito composable sigue disponible para desarrollo/tests vía los shims de `app/` (re-exportan los paquetes de servicio); la suite tier1 corre contra él
+- **Seguridad**: opt-in en el gateway (`services/gateway/gateway/middleware/security.py`): API key para mutaciones y rate limit Redis con fallback en memoria
 
 ## Endpoints
 
@@ -166,8 +176,16 @@ Selección automática por target; métricas primarias: `f1_macro` (clasificaci�
 ## Tests
 
 ```bash
-.venv\Scripts\python -m pytest tests -q
-python tests/fixtures/make_fixtures.py   # regenera fixtures E2E
+# Tier 1: suite completa contra el monolito componible (rápido, eager)
+.venv\Scripts\python -m pytest tests -q -p no:warnings
+
+# Regenerar fixtures E2E
+python tests/fixtures/make_fixtures.py
+```
+
+```bash
+# Tier 2: flujo de humo contra el stack de microservicios real
+docker compose --profile tier2 run --rm tier2
 ```
 
 ## Citación de software

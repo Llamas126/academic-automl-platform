@@ -1,0 +1,21 @@
+[project]
+name = "gateway"
+version = "0.1.0"
+description = "Academic AutoML - API gateway (auth, rate limiting, proxy)"
+requires-python = ">=3.12"
+dependencies = [
+    "automl-shared",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+]
+
+[project.optional-dependencies]
+redis = ["redis==6.4.0"]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gateway*"]

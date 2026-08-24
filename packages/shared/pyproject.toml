@@ -1,0 +1,19 @@
+[project]
+name = "automl-shared"
+version = "0.1.0"
+description = "Shared contracts (Pydantic schemas), storage and job-store infrastructure for academic-automl-platform microservices"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+]
+
+[project.optional-dependencies]
+redis = ["redis==6.4.0"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["automl_shared*"]

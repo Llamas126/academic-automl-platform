@@ -75,7 +75,7 @@ if $TEST; then
   fi
 fi
 
-echo "==> Building and starting stack (api, worker, beat, redis)"
+echo "==> Building and starting stack (gateway, ingestion, mlcore, inference, workers, redis)"
 UP_ARGS=(up -d)
 if ! $SKIP_BUILD; then
   UP_ARGS+=(--build)
@@ -85,11 +85,11 @@ if ! docker compose "${UP_ARGS[@]}"; then
   exit 2
 fi
 
-echo "==> Waiting for API health at http://localhost:8000/api/v1/health"
+echo "==> Waiting for gateway health at http://localhost:8000/health"
 DEADLINE=$((SECONDS + 120))
 HEALTHY=false
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-  if curl -fsS -m 3 http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+  if curl -fsS -m 3 http://localhost:8000/health >/dev/null 2>&1; then
     HEALTHY=true
     break
   fi
@@ -98,20 +98,20 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
 done
 echo ""
 if ! $HEALTHY; then
-  echo "ERROR: API did not become healthy within 120 seconds. Diagnostics:" >&2
+  echo "ERROR: gateway did not become healthy within 120 seconds. Diagnostics:" >&2
   docker compose ps
-  docker compose logs --tail 50 api
+  docker compose logs --tail 50 gateway
   exit 4
 fi
-echo "    API is healthy."
+echo "    Gateway is healthy."
 
 docker compose ps
 cat <<'EOF'
 
 Stack ready:
-  API   : http://localhost:8000
-  Docs  : http://localhost:8000/docs
-  Stop  : ./run.sh --down   (or: docker compose down)
+  Gateway : http://localhost:8000
+  Docs    : http://localhost:8000/docs
+  Stop    : ./run.sh --down   (or: docker compose down)
 
 Auth and rate limiting are disabled by default; see .env to enable them.
 EOF

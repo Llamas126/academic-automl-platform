@@ -1,0 +1,20 @@
+[project]
+name = "ingestion"
+version = "0.1.0"
+description = "Academic AutoML - dataset ingestion service"
+requires-python = ">=3.12"
+dependencies = [
+    "automl-shared",
+    "fastapi==0.141.1",
+    "openpyxl==3.1.5",
+    "pandas==3.0.5",
+    "python-multipart==0.0.32",
+    "pydantic==2.13.4",
+]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ingestion*"]
