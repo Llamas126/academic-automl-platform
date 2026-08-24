@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     shap_max_eval_rows: int = 500
     pdf_engine: Literal["auto", "tectonic", "none"] = "auto"
 
+    cleanup_enabled: bool = True
+    cleanup_interval_minutes: int = 360
+    job_retention_hours: int = 168
+    upload_retention_hours: int = 168
+
+    auth_enabled: bool = False
+    api_keys: str = ""
+    rate_limit_enabled: bool = False
+    rate_limit_max_requests: int = 60
+    rate_limit_window_seconds: int = 60
+
     @property
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"

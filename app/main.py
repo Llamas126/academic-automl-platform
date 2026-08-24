@@ -7,6 +7,7 @@ import app.api.v1.router as api_router_module
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.security import register_security_middlewares
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     register_exception_handlers(app)
+    register_security_middlewares(app)
     app.include_router(api_router_module.api_router, prefix=settings.api_v1_prefix)
     return app
 

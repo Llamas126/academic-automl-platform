@@ -5,7 +5,8 @@ Backend asíncrono de AutoML para investigación académica: ingesta de tablas C
 ## Arquitectura
 
 - **API**: FastAPI (`app/main.py`), rutas en `app/api/v1/`
-- **Tareas**: Celery + Redis (`app/tasks/`); fallback a ejecución eager + job store en memoria cuando Redis no está disponible
+- **Tareas**: Celery + Redis (`app/tasks/`); fallback a ejecución eager + job store en memoria cuando Redis no está disponible; beat programado para limpieza TTL de artefactos
+- **Seguridad**: middleware ligero opt-in (`app/core/security.py`): API key para mutaciones y rate limit en-proceso
 - **Núcleo ML**: `app/ml/` (profiling, preprocesado, registry de modelos, K-Fold compartido, métricas IC95%, Optuna, multi-target, pipeline)
 - **Exportación científica**: `app/services/` (figuras, LaTeX booktabs, BibTeX, reporte Jinja→Tectonic, empaquetado ZIP+MANIFEST)
 
@@ -18,6 +19,7 @@ Backend asíncrono de AutoML para investigación académica: ingesta de tablas C
 | GET | `/api/v1/datasets/{dataset_id}` | Metadatos del dataset |
 | DELETE | `/api/v1/datasets/{dataset_id}` | Borra dataset |
 | POST | `/api/v1/train` | Crea job de entrenamiento (202) |
+| POST | `/api/v1/predict/{job_id}` | Inferencia con los modelos de un run terminado: JSON `{"records":[...]}` o upload CSV/XLSX; query opcional `?targets=t1,t2` |
 | GET | `/api/v1/status/{job_id}` | Estado/estadio/progreso |
 | GET | `/api/v1/download/{job_id}` | Descarga ZIP del run |
 
@@ -28,7 +30,7 @@ docker compose up --build
 # API en http://localhost:8000 — docs en /docs
 ```
 
-El worker incluye Tectonic para compilar el PDF; sin motor LaTeX el paquete se entrega igualmente con las fuentes `.tex`.
+El worker incluye Tectonic para compilar el PDF; sin motor LaTeX el paquete se entrega igualmente con las fuentes `.tex`. El servicio `beat` programa la tarea `maintenance.cleanup` (limpieza TTL de `DATA_DIR`).
 
 ## Arranque local (sin Docker)
 
@@ -65,6 +67,37 @@ models/<target>_best_model.joblib
 metrics/results_summary.json     metrics/per_fold.csv
 data/dataset_with_predictions.csv  MANIFEST.txt
 ```
+
+## Inferencia
+
+```bash
+# Registros JSON (tiempo real o lotes pequeños)
+curl -X POST "http://localhost:8000/api/v1/predict/<job_id>" \
+  -H "Content-Type: application/json" \
+  -d '{"records": [{"x1": 0.5, "x2": 5.0, "category": "A"}]}'
+
+# Lote por archivo (CSV/XLSX); ?targets= filtra un subconjunto
+curl -X POST "http://localhost:8000/api/v1/predict/<job_id>?targets=grade" \
+  -F "file=@nuevos_datos.csv"
+```
+
+La respuesta va alineada por fila (`predictions[i].row_index`), con etiquetas decodificadas y
+bloques `<target>_probabilities` por clase en clasificación. Columnas extra se ignoran con un
+warning; columnas faltantes devuelven 422.
+
+## Mantenimiento (TTL cleanup)
+
+`maintenance.cleanup` borra `data/jobs/*` y `data/uploads/*` cuya última modificación exceda la
+retención (`JOB_RETENTION_HOURS` / `UPLOAD_RETENTION_HOURS`, 168 h por defecto). Los jobs en
+estado PENDING/STARTED/PROGRESS nunca se eliminan. Se ejecuta vía Celery Beat cada
+`CLEANUP_INTERVAL_MINUTES`; desactívable con `CLEANUP_ENABLED=false`.
+
+## Seguridad
+
+Opt-in por variables de entorno: `AUTH_ENABLED=true` + `API_KEYS=k1,k2` exige `X-API-Key` en las
+mutaciones (upload/train/predict; lecturas públicas). `RATE_LIMIT_ENABLED=true`,
+`RATE_LIMIT_MAX_REQUESTS` y `RATE_LIMIT_WINDOW_SECONDS` activan un limitador en-proceso
+(ventana deslizante por API key o IP) que responde 429 + `Retry-After`.
 
 ## Modelos soportados
 

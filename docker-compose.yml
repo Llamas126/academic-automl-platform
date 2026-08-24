@@ -35,3 +35,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  beat:
+    build: .
+    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOB_STORE_BACKEND: redis
+      CELERY_EAGER: "false"
+      DATA_DIR: /app/data
+    depends_on:
+      redis:
+        condition: service_healthy

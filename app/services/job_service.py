@@ -22,6 +22,9 @@ class JobStore:
     def update(self, job_id: str, **fields) -> None:
         raise NotImplementedError
 
+    def all_ids(self) -> set[str]:
+        raise NotImplementedError
+
 
 class MemoryJobStore(JobStore):
     def __init__(self) -> None:
@@ -54,6 +57,10 @@ class MemoryJobStore(JobStore):
             if record is None:
                 return
             record.update(fields)
+
+    def all_ids(self) -> set[str]:
+        with self._lock:
+            return set(self._jobs.keys())
 
 
 class RedisJobStore(JobStore):
@@ -93,6 +100,10 @@ class RedisJobStore(JobStore):
         record = json.loads(raw)
         record.update(fields)
         self._client.set(key, json.dumps(record), ex=JOB_TTL_SECONDS)
+
+    def all_ids(self) -> set[str]:
+        prefix = "automl:job:"
+        return {key[len(prefix) :] for key in self._client.scan_iter(match=f"{prefix}*")}
 
 
 _store_instance: JobStore | None = None
