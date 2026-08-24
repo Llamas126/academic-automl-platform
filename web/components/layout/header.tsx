@@ -4,7 +4,7 @@ import { Globe, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,12 +46,12 @@ export function Header() {
           <span className="hidden sm:inline">{t("app.title")}</span>
         </Link>
         <nav className="ml-auto flex items-center gap-1 text-sm">
-          <Button variant="ghost" size="sm" render={<Link href="/" />}>
+          <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             {t("nav.train")}
-          </Button>
-          <Button variant="ghost" size="sm" render={<Link href="/predict" />}>
+          </Link>
+          <Link href="/predict" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             {t("nav.predict")}
-          </Button>
+          </Link>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

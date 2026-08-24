@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -157,17 +157,17 @@ export default function JobPage() {
                 <Download className="mr-1 h-4 w-4" />
                 {downloading ? t("results.downloading") : t("jobs.downloadZip")}
               </Button>
-              <Button onClick={invalidate} render={<Link href={`/results/${jobId}`} />}>
+              <Link href={`/results/${jobId}`} onClick={invalidate} className={buttonVariants()}>
                 {t("jobs.viewResults")}
-              </Button>
+              </Link>
             </div>
           )}
 
           {["FAILURE", "SUCCESS"].includes(job.state) && (
             <div className="flex justify-start">
-              <Button variant="ghost" size="sm" render={<Link href="/" />}>
+              <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
                 {t("jobs.newTrain")}
-              </Button>
+              </Link>
             </div>
           )}
         </>

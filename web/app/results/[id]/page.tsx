@@ -10,7 +10,7 @@ import { CitationBox } from "@/components/results/citation-box";
 import { ComparisonChart, ModelsTable } from "@/components/results/models-table";
 import { ShapGallery } from "@/components/results/shap-gallery";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -86,9 +86,12 @@ export default function ResultsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{t("results.title")}</h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" render={<Link href={`/predict?job=${jobId}`} />}>
+          <Link
+            href={`/predict?job=${jobId}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
             <FlaskConical className="mr-1 h-4 w-4" /> {t("results.predictCta")}
-          </Button>
+          </Link>
           <Button size="sm" onClick={handleDownload} disabled={downloading}>
             <Download className="mr-1 h-4 w-4" />
             {downloading ? t("results.downloading") : t("results.downloadZip")}
