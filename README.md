@@ -68,6 +68,24 @@ python -m venv .venv
 
 Sin Redis el sistema opera en modo eager con job store en memoria (útil para desarrollo y CI).
 
+## Frontend (web/)
+
+Interfaz Next.js 16 (App Router, Tailwind, shadcn/ui) con asistente de entrenamiento
+(subida de dataset → configuración → lanzamiento), seguimiento de jobs en tiempo real,
+dashboard de resultados (métricas por fold con IC95%, comparativa de modelos, galería SHAP,
+citación BibTeX) y consola de inferencia (registros manuales o archivo CSV/XLSX con export CSV).
+Internacionalización ES/EN con selector en la cabecera.
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:3000
+```
+
+Las peticiones a `/api/*` se proxean al backend vía rewrites (`API_ORIGIN`, por defecto
+`http://localhost:8000`); no se necesita CORS. Con el stack Docker levantado basta abrir
+el frontend y la aplicación funciona de punta a punta.
+
 ## Ejemplo de uso
 
 ```bash
