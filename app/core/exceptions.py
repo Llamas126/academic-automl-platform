@@ -27,6 +27,11 @@ class UnsupportedFileError(DomainError):
     detail = "Unsupported file format"
 
 
+class PayloadTooLargeError(DomainError):
+    status_code = 413
+    detail = "Payload too large"
+
+
 class ExportError(DomainError):
     status_code = 500
     detail = "Export failed"

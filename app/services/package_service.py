@@ -49,9 +49,10 @@ def export_and_package(
     if output.predictions_frame is not None:
         output.predictions_frame.to_csv(data_dir / "dataset_with_predictions.csv", index=False)
 
-    from app.services.artifact_service import save_final_models
+    from app.services.artifact_service import save_final_models, write_model_manifest
 
     save_final_models(output.artifacts, models_dir)
+    write_model_manifest(models_dir)
 
     cb("export:figures", 0.9)
     figure_paths_by_target = _export_diagnostics_figures(out_dir, output, request)

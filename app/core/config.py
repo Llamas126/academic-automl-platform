@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     rate_limit_max_requests: int = 60
     rate_limit_window_seconds: int = 60
 
+    cors_origins: str = ""
+    hsts_enabled: bool = False
+
+    max_dataset_rows: int = 200_000
+    max_dataset_columns: int = 2_000
+    predict_max_records: int = 50_000
+    predict_max_body_mb: int = 64
+
+    artifact_integrity: Literal["off", "if_present", "strict"] = "if_present"
+    artifact_signing_key: str = ""
+
     @property
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"

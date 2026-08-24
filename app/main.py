@@ -17,6 +17,24 @@ async def lifespan(_app: FastAPI):
     yield
 
 
+def _configure_cors(app: FastAPI, settings) -> None:
+    """Enable CORS only for explicitly configured origins.
+
+    Empty ``CORS_ORIGINS`` (the default) means same-origin only: no CORS
+    headers are emitted at all. The wildcard must be opted into explicitly.
+    """
+    origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+    if not origins:
+        return
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials="*" not in origins,
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging()
@@ -26,12 +44,7 @@ def create_app() -> FastAPI:
         description="Async AutoML platform producing publication-ready artifacts",
         lifespan=lifespan,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    _configure_cors(app, settings)
     register_exception_handlers(app)
     register_security_middlewares(app)
     app.include_router(api_router_module.api_router, prefix=settings.api_v1_prefix)

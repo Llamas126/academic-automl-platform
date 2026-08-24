@@ -1,32 +1,57 @@
 services:
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - automl
 
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JOB_STORE_BACKEND: redis
       CELERY_EAGER: "false"
       DATA_DIR: /app/data
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      API_KEYS: ${API_KEYS:-}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-false}
     volumes:
       - ./data:/app/data
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    cpus: "2.0"
+    networks:
+      - automl
 
   worker:
     build: .
     command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=2
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JOB_STORE_BACKEND: redis
       CELERY_EAGER: "false"
       DATA_DIR: /app/data
@@ -35,15 +60,40 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 4g
+    cpus: "2.0"
+    networks:
+      - automl
 
   beat:
     build: .
     command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       JOB_STORE_BACKEND: redis
       CELERY_EAGER: "false"
-      DATA_DIR: /app/data
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - automl
+
+networks:
+  automl:
+    driver: bridge

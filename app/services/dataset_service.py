@@ -6,14 +6,35 @@ from pathlib import Path
 import pandas as pd
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError, UnsupportedFileError, ValidationFailedError
+from app.core.exceptions import (
+    NotFoundError,
+    PayloadTooLargeError,
+    UnsupportedFileError,
+    ValidationFailedError,
+)
 from app.ml.profiling.type_detector import profile_dataframe
 from app.schemas.dataset import DatasetProfile
-from app.storage.local_storage import storage
+from app.storage.local_storage import sanitize_filename, storage
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def read_upload_capped(upload, max_bytes: int) -> bytes:
+    """Read an UploadFile in chunks, aborting as soon as the cap is exceeded.
+
+    Prevents full-in-memory buffering of oversized bodies before the size
+    check happens (memory-exhaustion DoS).
+    """
+    buffer = bytearray()
+    while chunk := await upload.read(UPLOAD_CHUNK_BYTES):
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            settings = get_settings()
+            raise PayloadTooLargeError(f"file exceeds upload limit of {settings.max_upload_mb} MB")
+    return bytes(buffer)
 
 
 def read_tabular(path: Path) -> pd.DataFrame:
@@ -48,9 +69,10 @@ def ingest_dataset(filename: str, content: bytes) -> DatasetProfile:
         )
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if len(content) > max_bytes:
-        raise ValidationFailedError(f"file exceeds upload limit of {settings.max_upload_mb} MB")
+        raise PayloadTooLargeError(f"file exceeds upload limit of {settings.max_upload_mb} MB")
 
-    dataset_id, path = storage.save_upload(filename, content)
+    safe_name = sanitize_filename(filename)
+    dataset_id, path = storage.save_upload(safe_name, content)
     try:
         df = read_tabular(path)
     except (UnsupportedFileError, ValidationFailedError):
@@ -58,7 +80,7 @@ def ingest_dataset(filename: str, content: bytes) -> DatasetProfile:
         raise
     except Exception as exc:
         storage.delete_dataset(dataset_id)
-        raise ValidationFailedError(f"failed to parse '{filename}': {exc}") from exc
+        raise ValidationFailedError(f"failed to parse '{safe_name}': {exc}") from exc
 
     if df.empty:
         storage.delete_dataset(dataset_id)
@@ -66,8 +88,16 @@ def ingest_dataset(filename: str, content: bytes) -> DatasetProfile:
     if len(df.columns) < 2:
         storage.delete_dataset(dataset_id)
         raise ValidationFailedError("dataset must contain at least two columns")
+    if df.shape[0] > settings.max_dataset_rows:
+        storage.delete_dataset(dataset_id)
+        raise ValidationFailedError(f"dataset has {df.shape[0]} rows; limit is {settings.max_dataset_rows}")
+    if df.shape[1] > settings.max_dataset_columns:
+        storage.delete_dataset(dataset_id)
+        raise ValidationFailedError(
+            f"dataset has {df.shape[1]} columns; limit is {settings.max_dataset_columns}"
+        )
 
-    profile = profile_dataframe(df, dataset_id=dataset_id, filename=filename)
+    profile = profile_dataframe(df, dataset_id=dataset_id, filename=safe_name)
     storage.save_json(storage.profile_path(dataset_id), profile.model_dump(mode="json"))
     logger.info("profiled dataset %s (%d rows x %d cols)", dataset_id, df.shape[0], df.shape[1])
     return profile

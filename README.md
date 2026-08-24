@@ -95,9 +95,24 @@ estado PENDING/STARTED/PROGRESS nunca se eliminan. Se ejecuta vía Celery Beat c
 ## Seguridad
 
 Opt-in por variables de entorno: `AUTH_ENABLED=true` + `API_KEYS=k1,k2` exige `X-API-Key` en las
-mutaciones (upload/train/predict; lecturas públicas). `RATE_LIMIT_ENABLED=true`,
-`RATE_LIMIT_MAX_REQUESTS` y `RATE_LIMIT_WINDOW_SECONDS` activan un limitador en-proceso
-(ventana deslizante por API key o IP) que responde 429 + `Retry-After`.
+mutaciones (upload/train/predict; lecturas públicas, comparación constante-tiempo).
+`RATE_LIMIT_ENABLED=true`, `RATE_LIMIT_MAX_REQUESTS` y `RATE_LIMIT_WINDOW_SECONDS` activan un
+limitador en-proceso (ventana deslizante por API key o IP) que responde 429 + `Retry-After`.
+
+Controles defensivos siempre activos:
+
+- **Nombres de archivo saneados** y **validación estricta de IDs** (`^[A-Za-z0-9_-]{1,64}$`) en
+  todas las rutas — sin traversal en `DATA_DIR`.
+- **Lectura de uploads por chunks con aborto temprano** (413) y límites estructurales:
+  `MAX_DATASET_ROWS`, `MAX_DATASET_COLUMNS`, `PREDICT_MAX_RECORDS`, `PREDICT_MAX_BODY_MB`.
+- **Integridad de artefactos**: packaging escribe `models/models.sha256` (HMAC-SHA256 opcional vía
+  `ARTIFACT_SIGNING_KEY`); la inferencia verifica cada `.joblib` antes de deserializarlo
+  (`ARTIFACT_INTEGRITY=off|if_present|strict`, por defecto `if_present`).
+- **Cabeceras HTTP** en `/api/*`: nosniff, X-Frame-Options DENY, Referrer-Policy, CSP
+  `default-src 'none'`; HSTS opcional (`HSTS_ENABLED`). **CORS** solo para orígenes listados en
+  `CORS_ORIGINS` (por defecto desactivado).
+- **Contenedores**: non-root, `no-new-privileges`, `cap_drop ALL`, límites de memoria/CPU, Redis
+  con `--requirepass`, red dedicada y `beat` sin volumen de datos.
 
 ## Modelos soportados
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import threading
 import time
@@ -18,6 +19,30 @@ API_KEY_HEADER = "X-API-Key"
 
 def _error(status_code: int, error: str, detail: str, headers: dict | None = None) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": error, "detail": detail}, headers=headers)
+
+
+def _api_key_matches(provided: str, configured_keys: list[str]) -> bool:
+    """Constant-time comparison to prevent timing oracles on key matching."""
+    return any(hmac.compare_digest(provided, key) for key in configured_keys)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adds defensive HTTP headers to API responses (docs pages are exempt)."""
+
+    def __init__(self, app, api_prefix: str):
+        super().__init__(app)
+        self._api_prefix = api_prefix
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith(self._api_prefix):
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+            if get_settings().hsts_enabled:
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -53,7 +78,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         provided = request.headers.get(API_KEY_HEADER)
         if not provided:
             return _error(401, "Unauthorized", f"missing {API_KEY_HEADER} header")
-        if provided not in configured_keys:
+        if not _api_key_matches(provided, configured_keys):
             return _error(403, "Forbidden", "invalid API key")
         return await call_next(request)
 
@@ -110,10 +135,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def register_security_middlewares(app) -> None:
-    """Attach auth and rate limiting. Rate limiting ends up outermost."""
+    """Attach security headers, auth and rate limiting.
+
+    Rate limiting ends up outermost; security headers run last so short
+    -circuited 401/429 responses also carry them.
+    """
     settings = get_settings()
     app.add_middleware(AuthMiddleware, api_prefix=settings.api_v1_prefix)
     app.add_middleware(RateLimitMiddleware, exempt_paths=_exempt_paths(settings))
+    app.add_middleware(SecurityHeadersMiddleware, api_prefix=settings.api_v1_prefix)
 
 
 def _exempt_paths(settings) -> frozenset[str]:

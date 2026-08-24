@@ -1,3 +1,5 @@
+import os
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -7,6 +9,23 @@ from app.core.config import get_settings
 
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def sanitize_filename(filename: str | None) -> str:
+    """Reduce an uploaded filename to a safe single path segment.
+
+    Strips any directory components (both separators), replaces unsafe
+    characters, and never yields empty, dot-only, or traversal values.
+    """
+    raw = os.path.basename((filename or "").replace("\\", "/"))
+    cleaned = _UNSAFE_FILENAME_CHARS.sub("_", raw).lstrip(".")
+    cleaned = cleaned[:120].strip()
+    if not cleaned:
+        return "upload.csv"
+    return cleaned
 
 
 class LocalStorage:
@@ -33,7 +52,7 @@ class LocalStorage:
 
     def save_upload(self, filename: str, content: bytes) -> tuple[str, Path]:
         dataset_id = new_id("ds")
-        path = self.dataset_file(dataset_id, filename)
+        path = self.dataset_file(dataset_id, sanitize_filename(filename))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         return dataset_id, path

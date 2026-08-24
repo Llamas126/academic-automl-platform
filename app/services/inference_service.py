@@ -13,13 +13,14 @@ import pandas as pd
 from app.core.config import get_settings
 from app.core.exceptions import (
     ConflictError,
+    ExportError,
     NotFoundError,
     UnsupportedFileError,
     ValidationFailedError,
 )
 from app.schemas.jobs import JobState
 from app.schemas.predict import PredictResponse, PredictTargetMeta
-from app.services.artifact_service import load_model
+from app.services.artifact_service import load_model, verify_model_integrity
 from app.services.dataset_service import ALLOWED_EXTENSIONS, read_tabular
 from app.services.job_service import get_job_store
 from app.storage.local_storage import storage
@@ -48,6 +49,12 @@ def resolve_job_artifacts(job_id: str) -> JobArtifacts:
     summary_path = out_dir / "metrics" / "results_summary.json"
     if not summary_path.exists() or not models_dir.exists():
         raise NotFoundError(f"inference artifacts for job '{job_id}' are missing")
+
+    try:
+        verify_model_integrity(models_dir)
+    except ExportError:
+        logger.error("artifact integrity verification failed for job %s", job_id)
+        raise
 
     summary = storage.load_json(summary_path)
     models: dict[str, dict] = {}
@@ -80,6 +87,12 @@ def run_inference(job_id: str, df: pd.DataFrame, targets: list[str] | None = Non
     artifacts = resolve_job_artifacts(job_id)
     if df.empty:
         raise ValidationFailedError("inference input contains no rows")
+
+    settings = get_settings()
+    if len(df) > settings.predict_max_records:
+        raise ValidationFailedError(
+            f"inference input has {len(df)} rows; limit is {settings.predict_max_records}"
+        )
 
     warnings: list[str] = []
     if not artifacts.feature_columns:

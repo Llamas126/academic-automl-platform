@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from app.api.deps import job_store
 from app.core.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.validation import validate_resource_id
 from app.schemas.jobs import JobState, JobStatus
 
 router = APIRouter(tags=["jobs"])
@@ -11,6 +12,7 @@ router = APIRouter(tags=["jobs"])
 
 @router.get("/status/{job_id}", response_model=JobStatus)
 def get_status(job_id: str):
+    validate_resource_id(job_id, "job id")
     record = job_store().get(job_id)
     if record is None:
         raise NotFoundError(f"job '{job_id}' not found")
@@ -27,6 +29,7 @@ def get_status(job_id: str):
 
 @router.get("/download/{job_id}")
 def download_results(job_id: str):
+    validate_resource_id(job_id, "job id")
     store = job_store()
     record = store.get(job_id)
     if record is None:
