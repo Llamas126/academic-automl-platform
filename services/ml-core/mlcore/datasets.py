@@ -6,7 +6,6 @@ profile + file that ingestion already persisted under ``datasets/<id>/``.
 from __future__ import annotations
 
 import pandas as pd
-
 from automl_shared.core.exceptions import NotFoundError
 from automl_shared.schemas.dataset import DatasetProfile
 from automl_shared.storage.local_storage import storage

@@ -14,6 +14,7 @@ ignore = ["B008"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/services/bibtex_service.py" = ["E501"]
+"services/exporter/exporter/services/bibtex_service.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

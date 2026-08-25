@@ -1,14 +1,14 @@
+from automl_shared.core.config import get_settings
+from automl_shared.core.validation import validate_resource_id
 from fastapi import APIRouter, UploadFile
 from fastapi.responses import JSONResponse
 
-from automl_shared.core.config import get_settings
-from automl_shared.core.validation import validate_resource_id
 from ingestion import dataset_service
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 
-@router.post("/analyze-dataset", response_model=None)
+@router.post("/upload", response_model=None)
 async def analyze_dataset(file: UploadFile):
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     content = await dataset_service.read_upload_capped(file, max_bytes)

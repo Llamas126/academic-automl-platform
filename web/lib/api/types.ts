@@ -128,8 +128,8 @@ export interface RunSummary {
   n_samples: number;
   n_features: number;
   feature_columns: string[];
-  cv: Record<string, unknown>;
-  hpo: Record<string, unknown>;
+  cv: CVConfig;
+  hpo: HPOConfig;
   targets: TargetResults[];
   warnings: string[];
   library_versions: Record<string, string>;

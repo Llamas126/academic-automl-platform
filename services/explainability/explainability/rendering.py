@@ -77,7 +77,13 @@ def _render_all(work_dir: Path, out_dir: Path, request: TrainRequest) -> dict[st
     return counts
 
 
-def _write_status(work_dir: Path, *, ok: bool, rendered: dict[str, int] | None = None, error: str = "") -> None:
+def _write_status(
+    work_dir: Path,
+    *,
+    ok: bool,
+    rendered: dict[str, int] | None = None,
+    error: str = "",
+) -> None:
     payload = {"ok": ok}
     if rendered is not None:
         payload["rendered"] = rendered

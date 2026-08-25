@@ -7,12 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from automl_shared.contract import (
     BACKGROUND_NAME,
     META_NAME,
-    PREDICTIONS_RELPATH,
     PER_FOLD_RELPATH,
+    PREDICTIONS_RELPATH,
     SUMMARY_RELPATH,
     contract_complete,
     eval_npz_name,

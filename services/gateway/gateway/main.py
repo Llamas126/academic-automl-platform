@@ -3,12 +3,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from automl_shared.core.config import get_settings
 from automl_shared.core.exceptions import register_exception_handlers
 from automl_shared.core.logging import configure_logging
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager

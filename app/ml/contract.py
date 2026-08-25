@@ -1,8 +1,8 @@
 ﻿from automl_shared.contract import (
     BACKGROUND_NAME,
     META_NAME,
-    PREDICTIONS_RELPATH,
     PER_FOLD_RELPATH,
+    PREDICTIONS_RELPATH,
     SUMMARY_RELPATH,
     ExportTargetView,
     contract_complete,

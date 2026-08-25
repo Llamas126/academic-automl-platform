@@ -41,7 +41,7 @@ def _ensure_fixture() -> None:
 def _upload_csv(client: TestClient) -> str:
     with open(FIXTURE_CSV, "rb") as handle:
         response = client.post(
-            "/api/v1/datasets/analyze-dataset",
+            "/api/v1/datasets/upload",
             files={"file": ("mixed.csv", handle, "text/csv")},
         )
     assert response.status_code == 201, response.text

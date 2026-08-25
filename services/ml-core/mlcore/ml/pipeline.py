@@ -8,9 +8,11 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
+from automl_shared.core.exceptions import ValidationFailedError
+from automl_shared.schemas.results import MetricAggregate, ModelResult, RunSummary, TargetResults
+from automl_shared.schemas.training import TrainRequest
 from sklearn.pipeline import Pipeline
 
-from automl_shared.core.exceptions import ValidationFailedError
 from mlcore.ml.metrics.calculator import (
     METRIC_DIRECTIONS,
     aggregate_metric,
@@ -27,8 +29,6 @@ from mlcore.ml.search.optuna_tuner import (
 )
 from mlcore.ml.targets.multi_target import RunContext, TargetSpec, resolve_targets
 from mlcore.ml.validation.kfold import fold_report, make_folds
-from automl_shared.schemas.results import MetricAggregate, ModelResult, RunSummary, TargetResults
-from automl_shared.schemas.training import TrainRequest
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,9 @@ def _evaluate_nested_mode(
     )
     fold_records: list[dict] = []
     metric_names: set[str] = set()
+    direction = METRIC_DIRECTIONS[primary_metric(spec.task)]
+    best_fold_primary: float | None = None
+    best_fold_params: dict = {}
 
     for fold_index, (train_idx, test_idx) in enumerate(folds):
         params_fold: dict = {}
@@ -229,6 +232,14 @@ def _evaluate_nested_mode(
             fold_records.append(
                 {"model": entry.key, "fold": fold_index, "params": params_fold, **_round_metrics(metrics)}
             )
+            fold_primary_val = metrics.get(primary_metric(spec.task))
+            if fold_primary_val is not None and (
+                best_fold_primary is None
+                or (direction == "max" and fold_primary_val > best_fold_primary)
+                or (direction == "min" and fold_primary_val < best_fold_primary)
+            ):
+                best_fold_primary = fold_primary_val
+                best_fold_params = params_fold
         else:
             fold_records.append({"model": entry.key, "fold": fold_index, "error": error_msg})
         tracker.complete(0.5 if request.hpo.enabled else 1.0)
@@ -245,13 +256,12 @@ def _evaluate_nested_mode(
     result = ModelResult(
         model=entry.display_name,
         citation_key=entry.citation_key,
-        best_params={},
+        best_params=best_fold_params,
         primary_metric=primary,
         primary_mean=primary_agg.mean,
         rank=0,
         metrics=aggregates,
     )
-    result.best_params = {}
     return result, fold_records, oof_pred, oof_proba
 
 

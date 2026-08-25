@@ -55,8 +55,6 @@ def _resolve(path: str, method: str) -> str | None:
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"])
 async def proxy(request: Request, path: str) -> Response:
-    from automl_shared.core.config import get_settings
-
     full_path = f"/{path}"
     upstream_base = _resolve(full_path, request.method)
     if upstream_base is None:

@@ -28,7 +28,7 @@ def _small_csv(rows: int = 10) -> bytes:
 
 
 def _upload(client: TestClient, csv_bytes: bytes, name: str = "synthetic.csv"):
-    return client.post("/api/v1/datasets/analyze-dataset", files={"file": (name, csv_bytes, "text/csv")})
+    return client.post("/api/v1/datasets/upload", files={"file": (name, csv_bytes, "text/csv")})
 
 
 def test_traversal_filename_is_contained(client, isolated_data_dir):

@@ -25,7 +25,7 @@ Microservicios desacoplados que comparten un paquete común (`packages/shared/au
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/v1/health` | Liveness |
-| POST | `/api/v1/datasets/analyze-dataset` | Sube CSV/XLSX, devuelve profiling y sugerencias de targets (201) |
+| POST | `/api/v1/datasets/upload` | Sube CSV/XLSX, devuelve profiling y sugerencias de targets (201) |
 | GET | `/api/v1/datasets/{dataset_id}` | Metadatos del dataset |
 | DELETE | `/api/v1/datasets/{dataset_id}` | Borra dataset |
 | POST | `/api/v1/train` | Crea job de entrenamiento (202) |
@@ -99,7 +99,7 @@ el frontend y la aplicación funciona de punta a punta.
 ## Ejemplo de uso
 
 ```bash
-curl -F "file=@tests/fixtures/data/mixed_targets.csv" http://localhost:8000/api/v1/datasets/analyze-dataset
+curl -F "file=@tests/fixtures/data/mixed_targets.csv" http://localhost:8000/api/v1/datasets/upload
 
 curl -X POST http://localhost:8000/api/v1/train -H "Content-Type: application/json" -d '{
   "dataset_id": "<ds_id>",

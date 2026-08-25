@@ -6,10 +6,10 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
 from automl_shared.core.config import get_settings
 from automl_shared.schemas.results import RunSummary
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
 from exporter.services import latex_service
 
 logger = logging.getLogger(__name__)

@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 EVENTS_CHANNEL = "automl.events"
 
+_event_client = None
+
 
 class EventEnvelope:
     """Minimal typed envelope for domain events published over Redis Pub/Sub."""
@@ -28,20 +30,33 @@ class EventEnvelope:
         }
 
 
+def _get_event_client():
+    global _event_client
+    if _event_client is not None:
+        return _event_client
+    import redis as _redis
+
+    from automl_shared.core.config import get_settings
+
+    settings = get_settings()
+    _event_client = _redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    return _event_client
+
+
 def publish_event(envelope: EventEnvelope) -> bool:
     """Best-effort publish; events are observability sugar, never critical path."""
+    global _event_client
     try:
         from automl_shared.core.config import get_settings
 
         settings = get_settings()
         if settings.job_store_backend != "redis":
             return False
-        import redis
-
-        client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        client = _get_event_client()
         client.publish(EVENTS_CHANNEL, json.dumps(envelope.to_dict()))
         return True
     except Exception as exc:  # noqa: BLE001 - observability must never break the flow
+        _event_client = None
         logger.debug("event publish skipped (%s): %s", envelope.event_type, exc)
         return False
 

@@ -1,6 +1,6 @@
 def test_analyze_dataset_roundtrip(client, mixed_targets_csv):
     response = client.post(
-        "/api/v1/datasets/analyze-dataset",
+        "/api/v1/datasets/upload",
         files={"file": ("synthetic.csv", mixed_targets_csv, "text/csv")},
     )
     assert response.status_code == 201
@@ -24,7 +24,7 @@ def test_analyze_dataset_roundtrip(client, mixed_targets_csv):
 
 def test_analyze_dataset_rejects_bad_extension(client):
     response = client.post(
-        "/api/v1/datasets/analyze-dataset",
+        "/api/v1/datasets/upload",
         files={"file": ("malware.exe", b"MZ...", "application/octet-stream")},
     )
     assert response.status_code == 415

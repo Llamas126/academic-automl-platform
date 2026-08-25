@@ -1,18 +1,16 @@
 """Diagnostic figure builders for the scientific bundle."""
 from __future__ import annotations
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
-import matplotlib
-
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-from sklearn.metrics import auc, roc_curve
-
 from automl_shared.figures import configure_publication_style, save_figure  # noqa: F401
+from sklearn.metrics import auc, roc_curve
 
 __all__ = [
     "configure_publication_style",

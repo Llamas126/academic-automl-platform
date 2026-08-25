@@ -7,6 +7,7 @@ from automl_shared.jobs.job_store import get_job_store, mark_failure
 from automl_shared.schemas.training import TrainRequest
 from automl_shared.storage.local_storage import storage
 from automl_shared.workflow import stage_guard
+
 from explainability.rendering import render_shap_figures_if_requested
 from explainability.worker.celery_app import celery_app
 

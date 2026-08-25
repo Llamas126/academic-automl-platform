@@ -12,11 +12,10 @@ import threading
 import time
 from collections import defaultdict, deque
 
+from automl_shared.core.config import get_settings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-
-from automl_shared.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 

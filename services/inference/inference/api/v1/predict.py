@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Query, Request
-
 from automl_shared.core.config import get_settings
 from automl_shared.core.exceptions import PayloadTooLargeError, ValidationFailedError
 from automl_shared.core.validation import validate_resource_id
 from automl_shared.schemas.predict import PredictRecordsRequest, PredictResponse
-from inference.upload_guard import read_upload_capped
+from fastapi import APIRouter, Query, Request
 from inference.inference_service import run_inference_from_file, run_inference_from_records
+from inference.upload_guard import read_upload_capped
 
 router = APIRouter(tags=["inference"])
 

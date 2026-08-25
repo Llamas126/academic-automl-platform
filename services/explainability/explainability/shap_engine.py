@@ -6,7 +6,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 from automl_shared.figures import save_figure
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 def _upload(client, csv_bytes, name="synthetic.csv"):
     response = client.post(
-        "/api/v1/datasets/analyze-dataset",
+        "/api/v1/datasets/upload",
         files={"file": (name, csv_bytes, "text/csv")},
     )
     assert response.status_code == 201

@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     hsts_enabled: bool = False
 
     ingestion_service_url: str = "http://ingestion:8000"
-    mlcore_service_url: str = "http://mlcore:8000"
+    mlcore_service_url: str = "http://mlcore-api:8000"
     inference_service_url: str = "http://inference:8000"
 
     max_dataset_rows: int = 200_000

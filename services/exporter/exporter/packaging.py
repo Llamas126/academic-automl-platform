@@ -12,7 +12,6 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
-
 from automl_shared.contract import (
     load_per_fold_records,
     load_summary,

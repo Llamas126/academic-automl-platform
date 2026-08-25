@@ -10,9 +10,9 @@ import io
 import os
 import time
 
+import httpx
 import numpy as np
 import pandas as pd
-import httpx
 import pytest
 
 pytestmark = [
@@ -70,7 +70,7 @@ def test_gateway_health(client):
 
 def test_upload_train_download_predict_flow(client, regression_csv):
     upload = client.post(
-        "/api/v1/datasets/analyze-dataset",
+        "/api/v1/datasets/upload",
         files={"file": ("regression.csv", regression_csv, "text/csv")},
     )
     assert upload.status_code == 201, upload.text

@@ -1,9 +1,11 @@
 services:
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
@@ -40,10 +42,36 @@ services:
       INGESTION_SERVICE_URL: http://ingestion:8000
       MLCORE_SERVICE_URL: http://mlcore-api:8000
       INFERENCE_SERVICE_URL: http://inference:8000
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-200}"
+      MAX_DATASET_ROWS: "${MAX_DATASET_ROWS:-200000}"
+      MAX_DATASET_COLUMNS: "${MAX_DATASET_COLUMNS:-2000}"
+      PREDICT_MAX_RECORDS: "${PREDICT_MAX_RECORDS:-50000}"
+      PREDICT_MAX_BODY_MB: "${PREDICT_MAX_BODY_MB:-64}"
+      FIGURES_DPI: "${FIGURES_DPI:-300}"
+      SHAP_BACKGROUND_SAMPLES: "${SHAP_BACKGROUND_SAMPLES:-100}"
+      SHAP_MAX_EVAL_ROWS: "${SHAP_MAX_EVAL_ROWS:-500}"
+      PDF_ENGINE: "${PDF_ENGINE:-auto}"
+      DEFAULT_RANDOM_STATE: "${DEFAULT_RANDOM_STATE:-42}"
+      CLEANUP_ENABLED: "${CLEANUP_ENABLED:-true}"
+      CLEANUP_INTERVAL_MINUTES: "${CLEANUP_INTERVAL_MINUTES:-360}"
+      JOB_RETENTION_HOURS: "${JOB_RETENTION_HOURS:-168}"
+      UPLOAD_RETENTION_HOURS: "${UPLOAD_RETENTION_HOURS:-168}"
+      RATE_LIMIT_MAX_REQUESTS: "${RATE_LIMIT_MAX_REQUESTS:-60}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-60}"
+      HSTS_ENABLED: "${HSTS_ENABLED:-false}"
+      ARTIFACT_INTEGRITY: "${ARTIFACT_INTEGRITY:-if_present}"
+      ARTIFACT_SIGNING_KEY: "${ARTIFACT_SIGNING_KEY:-}"
+      APP_DEBUG: "${APP_DEBUG:-false}"
     volumes:
       - ./data:/app/data
     depends_on:
       redis:
+        condition: service_healthy
+      ingestion:
+        condition: service_healthy
+      mlcore-api:
+        condition: service_healthy
+      inference:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
@@ -275,3 +303,6 @@ services:
 networks:
   automl:
     driver: bridge
+
+volumes:
+  redis-data:

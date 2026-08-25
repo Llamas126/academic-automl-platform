@@ -6,12 +6,12 @@ addressed by task name only; each worker resolves its own app.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, status
-
 from automl_shared.core.exceptions import ValidationFailedError
 from automl_shared.schemas.jobs import JobCreated
 from automl_shared.schemas.training import TrainRequest
 from automl_shared.storage.local_storage import new_id
+from fastapi import APIRouter, status
+
 from mlcore.api.deps import job_store
 from mlcore.datasets import load_profile
 from mlcore.ml.models.registry import REGISTRY
@@ -46,8 +46,6 @@ def train(request: TrainRequest):
 
 
 def _dispatch_chain(job_id: str) -> None:
-    from celery import chain
-
     from automl_shared.workflow import (
         QUEUE_EXPLAIN,
         QUEUE_EXPORT,
@@ -55,6 +53,8 @@ def _dispatch_chain(job_id: str) -> None:
         TASK_EXPORT,
         TASK_TRAIN,
     )
+    from celery import chain
+
     from mlcore.worker.celery_app import celery_app
 
     head = celery_app.signature(TASK_TRAIN, args=(job_id,), queue="ml.training")

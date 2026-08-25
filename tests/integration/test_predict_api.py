@@ -14,7 +14,7 @@ TRAIN_PAYLOAD_TEMPLATE = {
 
 def _upload(client, csv_bytes) -> str:
     response = client.post(
-        "/api/v1/datasets/analyze-dataset",
+        "/api/v1/datasets/upload",
         files={"file": ("synthetic.csv", csv_bytes, "text/csv")},
     )
     assert response.status_code == 201

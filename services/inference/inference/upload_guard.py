@@ -1,10 +1,9 @@
 """Upload body guards for the inference service."""
 from __future__ import annotations
 
-from fastapi import UploadFile
-
 from automl_shared.core.config import get_settings
 from automl_shared.core.exceptions import PayloadTooLargeError
+from fastapi import UploadFile
 
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 

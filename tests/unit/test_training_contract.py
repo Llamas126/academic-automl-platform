@@ -5,7 +5,6 @@ import pandas as pd
 import pytest
 
 from app.ml.contract import (
-    BACKGROUND_NAME,
     META_NAME,
     load_background_frame,
     load_summary,

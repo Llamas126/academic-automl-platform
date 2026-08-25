@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-
 from automl_shared.core.config import get_settings
 from automl_shared.core.exceptions import (
     NotFoundError,

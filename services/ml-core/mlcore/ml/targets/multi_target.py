@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-
 from automl_shared.core.exceptions import ValidationFailedError
 from automl_shared.profiling.type_detector import (
     assert_finite_targets,
@@ -14,6 +12,7 @@ from automl_shared.profiling.type_detector import (
 )
 from automl_shared.schemas.dataset import ColumnRole
 from automl_shared.schemas.training import TargetIn
+from sklearn.preprocessing import LabelEncoder
 
 
 @dataclass
