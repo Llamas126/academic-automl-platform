@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Logo } from "@/components/ui/logo";
 import { useI18n, type Lang } from "@/lib/i18n";
 
 const LANGS: { value: Lang; label: string; flag: string }[] = [
@@ -40,10 +41,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-bold">
-            ML
-          </span>
-          <span className="hidden sm:inline">{t("app.title")}</span>
+          <Logo variant="full" />
         </Link>
         <nav className="ml-auto flex items-center gap-1 text-sm">
           <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>

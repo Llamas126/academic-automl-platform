@@ -47,7 +47,7 @@ Microservicios desacoplados que comparten un paquete común (`packages/shared/au
 ./run.sh
 ```
 
-El script, sin configuración manual previa: crea `.env` desde `.env.example` con una
+El script, sin configuracopión manual previa: crea `.env` desde `.env.example` con una
 `REDIS_PASSWORD` aleatoria si falta (nunca sobrescribe una existente), valida que el motor Docker
 esté activo, construye y levanta `api`, `worker`, `beat` y `redis`, y espera hasta que el
 healthcheck responda en `http://localhost:8000/api/v1/health`.

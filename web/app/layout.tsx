@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { Footer } from "@/components/layout/footer";
 import { Header } from "@/components/layout/header";
 import { Providers } from "@/components/providers";
 
@@ -20,6 +21,15 @@ export const metadata: Metadata = {
   title: "Academic AutoML Platform",
   description:
     "Automated machine learning with nested cross-validation, SHAP explainability and reproducible scientific packages.",
+  icons: {
+    icon: "/isotype-logo.ico",
+  },
+  openGraph: {
+    title: "Academic AutoML Platform",
+    description:
+      "Automated machine learning with nested cross-validation, SHAP explainability and reproducible scientific packages.",
+    images: ["/opengraph-image.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -33,9 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Providers>
           <Header />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
-          <footer className="border-t py-4 text-center text-xs text-muted-foreground">
-            Academic AutoML Platform · FastAPI + Next.js
-          </footer>
+          <Footer />
         </Providers>
       </body>
     </html>
