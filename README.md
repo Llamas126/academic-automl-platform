@@ -1,6 +1,15 @@
 # academic-automl-platform
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.13+](https://img.shields.io/badge/Python-%3E%3D3.13-3776AB.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+[![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+
 Backend asíncrono de AutoML para investigación académica: ingesta de tablas CSV/XLSX, modelado multi-target (regresión y clasificación mixtas), comparación de algoritmos con validación cruzada anidada, optimización de hiperparámetros con Optuna, explicabilidad SHAP y entrega de un paquete ZIP listo para publicación (reporte PDF/LaTeX, tablas booktabs, BibTeX, figuras 300 DPI PNG+EPS, modelos `.joblib` y predicciones out-of-fold).
+
+---
+
+> **English:** Async AutoML backend for scientific research and academic publication: CSV/XLSX table ingestion, multi-target modeling (mixed regression and classification), algorithm comparison with nested cross-validation, hyperparameter optimization with Optuna, SHAP explainability, and delivery of a publication-ready ZIP bundle (PDF/LaTeX report, booktabs tables, BibTeX, 300 DPI PNG+EPS figures, `.joblib` models, and out-of-fold predictions).
 
 ## Arquitectura
 
@@ -188,6 +197,37 @@ python tests/fixtures/make_fixtures.py
 docker compose --profile tier2 run --rm tier2
 ```
 
-## Citación de software
+## Contribuir / Contributing
+
+¡Las contribuciones son bienvenidas! Lee la [Guía de Contribución](CONTRIBUTING.md)
+para configurar tu entorno y enviar cambios.
+
+Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to set
+up your environment and submit changes.
+
+## Seguridad / Security
+
+Para reportar vulnerabilidades de seguridad, envía un email a
+**juanc-llamasc@qbitsglobal.com**. No abras issues públicas.
+Ver [SECURITY.md](SECURITY.md) para más detalles.
+
+To report security vulnerabilities, email **juanc-llamasc@qbitsglobal.com**.
+Do not open public issues. See [SECURITY.md](SECURITY.md) for details.
+
+## Código de Conducta / Code of Conduct
+
+Este proyecto sigue el [Contributor Covenant v2.1](CODE_OF_CONDUCT.md).
+
+This project follows the [Contributor Covenant v2.1](CODE_OF_CONDUCT.md).
+
+## Licencia / License
+
+Este proyecto está licenciado bajo la [MIT License](LICENSE).
+
+This project is licensed under the [MIT License](LICENSE).
+
+## Citación de software / Software Citation
 
 `bib/references.bib` incluye entradas BibTeX curadas (scikit-learn, XGBoost, LightGBM, Optuna, SHAP, NumPy, pandas, matplotlib, seaborn) con versiones exactas registradas en cada run.
+
+`bib/references.bib` includes curated BibTeX entries (scikit-learn, XGBoost, LightGBM, Optuna, SHAP, NumPy, pandas, matplotlib, seaborn) with exact versions recorded in each run.

@@ -1,0 +1,102 @@
+name: Bug Report / Reportar Bug
+description: Reporta un error o comportamiento inesperado / Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar un bug. Por favor completa la información below.
+        Thank you for reporting a bug. Please fill in the information below.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción / Description
+      description: Describe el bug claramente / Describe the bug clearly
+      placeholder: Describe qué sucedió...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para Reproducir / Steps to Reproduce
+      description: ¿Cómo podemos reproducir este bug? / How can we reproduce this bug?
+      placeholder: |
+        1. Ir a '...'
+        2. Ejecutar '...'
+        3. Ver error '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento Esperado / Expected Behavior
+      description: ¿Qué esperabas que sucediera? / What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamiento Actual / Actual Behavior
+      description: ¿Qué sucedió realmente? / What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Si aplica, incluye logs relevantes o mensajes de error / If applicable, include relevant logs or error messages
+      render: shell
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área Afectada / Affected Area
+      description: ¿Qué componente del sistema está afectado? / Which system component is affected?
+      options:
+        - Backend (API / Microservicios)
+        - Frontend (Next.js / UI)
+        - ML Pipeline (Entrenamiento / Optuna)
+        - Export (LaTeX / PDF / ZIP)
+        - Inference (Predicción)
+        - Docker / Infraestructura
+        - Otro / Other
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Versión de Python / Python Version
+      placeholder: "3.13.0"
+    validations:
+      required: false
+
+  - type: input
+    id: docker-version
+    attributes:
+      label: Versión de Docker / Docker Version
+      placeholder: "24.0.7"
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Sistema Operativo / Operating System
+      placeholder: "Windows 11 / Ubuntu 24.04 / macOS 14"
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto Adicional / Additional Context
+      description: Cualquier otra información relevante / Any other relevant information
+    validations:
+      required: false

@@ -1,0 +1,53 @@
+name: Question / Pregunta
+description: Haz una pregunta sobre uso, configuración o arquitectura / Ask about usage, configuration, or architecture
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Para preguntas rápidas, revisa la [documentación](README.md) primero.
+        For quick questions, check the [documentation](README.md) first.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Pregunta / Question
+      description: ¿Qué necesitas saber? / What do you need to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto / Context
+      description: |
+        ¿Qué estabas intentando hacer? ¿Qué ya intentaste?
+        What were you trying to do? What have you already tried?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área / Area
+      description: ¿Sobre qué componente es la pregunta? / Which component is the question about?
+      options:
+        - Backend (API / Microservicios)
+        - Frontend (Next.js / UI)
+        - ML Pipeline (Entrenamiento / Optuna)
+        - Export (LaTeX / PDF / ZIP)
+        - Inference (Predicción)
+        - Docker / Despliegue
+        - General / Otro
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión / Version
+      description: ¿Qué versión del proyecto estás usando? / What version are you using?
+      placeholder: "0.1.0"
+    validations:
+      required: false

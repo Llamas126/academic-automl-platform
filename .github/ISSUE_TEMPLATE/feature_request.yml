@@ -1,0 +1,78 @@
+name: Feature Request / Solicitud de Funcionalidad
+description: Sugiere una nueva funcionalidad o mejora / Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe la funcionalidad que te gustaría ver. / Describe the feature you'd like to see.
+        Esto es solo una solicitud — no todas las funcionalidades serán implementadas.
+        This is just a request — not all features will be implemented.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema / Problem
+      description: |
+        ¿Qué problema resuelve esta funcionalidad? / What problem does this feature solve?
+        ¿Por qué es necesaria? / Why is it needed?
+      placeholder: "Actualmente tengo que..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solución Propuesta / Proposed Solution
+      description: ¿Cómo te gustaría que funcionara? / How would you like it to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas Consideradas / Alternatives Considered
+      description: ¿Has considerado otras soluciones? / Have you considered other solutions?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Alcance / Scope
+      description: ¿A qué componente afectaría? / Which component would it affect?
+      options:
+        - Backend (API / Microservicios)
+        - Frontend (Next.js / UI)
+        - ML Pipeline (Entrenamiento / Optuna / Models)
+        - Export (LaTeX / PDF / ZIP)
+        - Inference (Predicción)
+        - Infraestructura (Docker / CI)
+        - Documentación
+        - Múltiples componentes / Multiple components
+        - Otro / Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad para tu uso / Priority for your use case
+      description: ¿Qué tan importante es esto para ti? / How important is this to you?
+      options:
+        - Crítico / Critical
+        - Alto / High
+        - Medio / Medium
+        - Bajo / Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto Adicional / Additional Context
+      description: Cualquier otra información, screenshots, o links relevantes
+      placeholder: Any other context, screenshots, or relevant links
+    validations:
+      required: false

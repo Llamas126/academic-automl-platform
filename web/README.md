@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend — academic-automl-platform
 
-## Getting Started
+Interfaz web construida con **Next.js 16** (App Router, Tailwind CSS, shadcn/ui)
+para la plataforma AutoML académica.
 
-First, run the development server:
+Web interface built with **Next.js 16** (App Router, Tailwind CSS, shadcn/ui) for
+the academic AutoML platform.
+
+## Funcionalidades / Features
+
+- Asistente de entrenamiento: subida de dataset → configuración → lanzamiento
+- Seguimiento de jobs en tiempo real
+- Dashboard de resultados (métricas por fold con IC95%, comparativa de modelos,
+  galería SHAP, citación BibTeX)
+- Consola de inferencia (registros manuales o archivo CSV/XLSX con export CSV)
+- Internacionalización ES/EN con selector en la cabecera
+
+## Desarrollo / Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Las peticiones a `/api/*` se proxean al backend vía rewrites (`API_ORIGIN`, por
+defecto `http://localhost:8000`); no se necesita CORS.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+API requests to `/api/*` are proxied to the backend via rewrites (`API_ORIGIN`,
+default `http://localhost:8000`); no CORS needed.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Stack
 
-## Learn More
+- **Framework:** Next.js 16 (App Router)
+- **UI:** shadcn/ui + Tailwind CSS v4
+- **State:** React Query (@tanstack)
+- **Forms:** React Hook Form + Zod
+- **Charts:** Recharts
+- **i18n:** Custom (ES/EN, 265 translation keys)
 
-To learn more about Next.js, take a look at the following resources:
+## Más Información / More Info
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [README principal / Main README](../README.md)
+- [Guía de Contribución / Contributing Guide](../CONTRIBUTING.md)
+- [Licencia / License](../LICENSE)

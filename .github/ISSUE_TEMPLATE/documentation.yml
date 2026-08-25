@@ -1,0 +1,65 @@
+name: Documentation / Documentación
+description: Reporta documentación faltante, incorrecta o desactualizada / Report missing, incorrect, or outdated documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ayúdanos a mejorar la documentación. / Help us improve the documentation.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de Issue / Issue Type
+      description: ¿Qué tipo de problema de documentación? / What type of documentation issue?
+      options:
+        - Faltante / Missing
+        - Incorrecta / Incorrect
+        - Desactualizada / Outdated
+        - Confusa / Confusing
+        - Traducción / Translation
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción / Description
+      description: Describe el problema con la documentación / Describe the documentation issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: section
+    attributes:
+      label: Sección Afectada / Affected Section
+      description: ¿Qué documentación está afectada? / Which documentation is affected?
+      options:
+        - README.md (raiz / root)
+        - CONTRIBUTING.md
+        - SECURITY.md
+        - API Endpoints (README)
+        - Arquitectura (README)
+        - Setup / Quickstart
+        - Frontend (web/)
+        - Código fuente (docstrings / comments)
+        - Otro / Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Sugerencia de Mejora / Improvement Suggestion
+      description: Si tienes una propuesta de mejora, descríbela / If you have an improvement proposal, describe it
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto Adicional / Additional Context
+      description: Links, screenshots, o cualquier otra información relevante
+    validations:
+      required: false

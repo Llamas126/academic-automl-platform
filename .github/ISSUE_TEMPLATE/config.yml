@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Seguridad / Security
+    url: mailto:juanc-llamasc@qbitsglobal.com
+    about: "Para reportar vulnerabilidades de seguridad usa email / For security vulnerabilities, use email"
+  - name: Documentación / Documentation
+    url: https://github.com/Llamas126/academic-automl-platform/blob/main/README.md
+    about: "Revisa el README antes de abrir un issue / Check the README before opening an issue"
