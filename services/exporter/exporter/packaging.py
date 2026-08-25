@@ -150,15 +150,12 @@ def _export_diagnostics_figures(
 
         records = per_fold_records.get(target_name, [])
         models = sorted({r.get("model") for r in records if r.get("model")})
-        primary = (
-            next(iter(records))["primary_metric"]
-            if records and "primary_metric" in records[0]
-            else artifact.best_entry_key
-        )
+        primary = _resolve_primary_metric(records, artifact)
         box_fig = metric_boxplot_figure(records, primary, models) if models else None
         if box_fig is not None:
+            safe_stem = _safe_stem(target_name)
             written.extend(
-                save_figure(box_fig, fig_dir, f"boxplot_{primary}_{target_name}", include_eps)
+                save_figure(box_fig, fig_dir, f"boxplot_{primary}_{safe_stem}", include_eps)
             )
 
         relative_paths[target_name] = [
@@ -209,6 +206,29 @@ def _export_report(summary, tables_by_target, figure_paths_by_target, shap_notes
         fallback = report_dir / "report.tex"
         fallback.write_text("% report generation failed\n", encoding="utf-8")
         return fallback, None
+
+
+_TASK_PRIMARY_METRIC: dict[str, str] = {
+    "classification": "f1_macro",
+    "regression": "rmse",
+}
+
+
+def _resolve_primary_metric(records: list[dict], artifact) -> str:
+    """Resolve the primary metric name with a 3-level fallback chain."""
+    if records and "primary_metric" in records[0]:
+        return str(records[0]["primary_metric"])
+    default = _TASK_PRIMARY_METRIC.get(artifact.task)
+    if default:
+        return default
+    logger.warning(
+        "Could not resolve primary metric for target '%s' (task=%s); "
+        "falling back to best_entry_key '%s'",
+        getattr(artifact, "target", "?"),
+        artifact.task,
+        artifact.best_entry_key,
+    )
+    return artifact.best_entry_key
 
 
 def _safe_stem(name: str) -> str:

@@ -1,6 +1,8 @@
 """Diagnostic figure builders for the scientific bundle."""
 from __future__ import annotations
 
+import logging
+
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -11,6 +13,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from automl_shared.figures import configure_publication_style, save_figure  # noqa: F401
 from sklearn.metrics import auc, roc_curve
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "configure_publication_style",
@@ -118,7 +122,15 @@ def metric_boxplot_figure(per_fold_records: list[dict], metric: str, models: lis
         ax.boxplot(
             data,
             tick_labels=[_shorten(label, 22) for label in labels],
-            tick_label_kwargs={"rotation": 20, "ha": "right"},
+        )
+        ax.tick_params(axis="x", rotation=20)
+    else:
+        logger.warning(
+            "boxplot for metric '%s': no valid fold data for models %s "
+            "(%d records examined)",
+            metric,
+            models,
+            len(per_fold_records),
         )
     ax.set_ylabel(metric)
     ax.set_title(f"{metric} distribution across folds")
