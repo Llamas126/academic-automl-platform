@@ -32,6 +32,7 @@ class RunContext:
     categorical_cols: list[str]
     stratification_labels: np.ndarray | None
     warnings: list[str]
+    context_columns: dict[str, pd.Series] = field(default_factory=dict)
 
     @property
     def n_features(self) -> int:
@@ -105,6 +106,7 @@ def resolve_targets(df: pd.DataFrame, requests: list[TargetIn]) -> RunContext:
     excluded_columns: set[str] = set(target_names)
     numeric_cols: list[str] = []
     categorical_cols: list[str] = []
+    context_columns: dict[str, pd.Series] = {}
     for col in working.columns:
         if col in excluded_columns:
             continue
@@ -113,6 +115,8 @@ def resolve_targets(df: pd.DataFrame, requests: list[TargetIn]) -> RunContext:
         if is_excluded or role in (ColumnRole.datetime, ColumnRole.identifier, ColumnRole.text_free):
             if role in (ColumnRole.datetime, ColumnRole.text_free) and not is_excluded:
                 warnings.append(f"column '{col}' ({role.value}) excluded from features")
+            if role in (ColumnRole.datetime, ColumnRole.identifier):
+                context_columns[col] = converted.reset_index(drop=True)
             continue
         if role == ColumnRole.numeric:
             numeric_cols.append(col)
@@ -136,4 +140,5 @@ def resolve_targets(df: pd.DataFrame, requests: list[TargetIn]) -> RunContext:
         categorical_cols=categorical_cols,
         stratification_labels=stratification,
         warnings=warnings,
+        context_columns=context_columns,
     )
