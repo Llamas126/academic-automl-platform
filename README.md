@@ -24,7 +24,7 @@ Microservicios desacoplados que comparten un paquete común (`packages/shared/au
 | **exporter** | `services/exporter` | Bundle científico: figuras, tablas LaTeX, BibTeX, reporte PDF/Tectonic, ZIP+MANIFEST |
 | **inference** | `services/inference` | Predicción con los modelos `.joblib` de un run |
 
-- **Contrato entre servicios**: mlcore persiste en `data/jobs/<id>/work` (`training_meta.json`, `background.csv`, `eval_*.npz`) y `out` (métricas, modelos firmados); explainability y exporter son consumidores puros de esos archivos — no se conocen entre sí
+- **Contrato entre servicios**: mlcore persiste en `data/jobs/<id>/work` (`training_meta.json`, `background.csv`, `eval_*.npz`) y `out` (métricas, modelos firmados); explainability y exporter son consumidores puros de esos archivos , no se conocen entre sí
 - **Colas Celery**: `ml.training`, `explain.shap`, `export.package`, `maintenance`; guardia de etapas evita propagación cuando un eslabón falla
 - **Compatibilidad**: el monolito composable sigue disponible para desarrollo/tests vía los shims de `app/` (re-exportan los paquetes de servicio); la suite tier1 corre contra él
 - **Seguridad**: opt-in en el gateway (`services/gateway/gateway/middleware/security.py`): API key para mutaciones y rate limit Redis con fallback en memoria
@@ -165,7 +165,7 @@ limitador en-proceso (ventana deslizante por API key o IP) que responde 429 + `R
 Controles defensivos siempre activos:
 
 - **Nombres de archivo saneados** y **validación estricta de IDs** (`^[A-Za-z0-9_-]{1,64}$`) en
-  todas las rutas — sin traversal en `DATA_DIR`.
+  todas las rutas , sin traversal en `DATA_DIR`.
 - **Lectura de uploads por chunks con aborto temprano** (413) y límites estructurales:
   `MAX_DATASET_ROWS`, `MAX_DATASET_COLUMNS`, `PREDICT_MAX_RECORDS`, `PREDICT_MAX_BODY_MB`.
 - **Integridad de artefactos**: packaging escribe `models/models.sha256` (HMAC-SHA256 opcional vía
