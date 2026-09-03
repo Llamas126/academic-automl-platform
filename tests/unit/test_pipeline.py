@@ -84,6 +84,38 @@ def test_run_training_drops_rows_with_missing_targets():
     assert output.summary.n_samples < len(df)
 
 
+def test_predictions_frame_keeps_datetime_context_column():
+    df = _tiny_mixed_with_date()
+    output = run_training(_request(), "ds_test", "tiny_date.csv", df, "job_date")
+
+    assert "fecha" not in {t.target for t in output.summary.targets}
+    assert "fecha" not in set(output.summary.feature_columns)
+
+    pred_frame = output.predictions_frame
+    assert "fecha" in pred_frame.columns
+    assert len(pred_frame) == len(df)
+    expected = pd.to_datetime(df["fecha"], errors="coerce")
+    pd.testing.assert_series_equal(
+        pd.to_datetime(pred_frame["fecha"], errors="coerce").reset_index(drop=True),
+        expected.reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_run_training_drops_rows_with_missing_targets_and_keeps_date():
+    df = _tiny_mixed_with_date()
+    df.loc[[3, 17], "value"] = np.nan
+    request = _request()
+    request.targets = [TargetIn(name="value", task="auto")]
+    output = run_training(request, "ds_x", "t_date.csv", df, "job_missing_date")
+
+    pred_frame = output.predictions_frame
+    assert "fecha" in pred_frame.columns
+    assert len(pred_frame) < len(df)
+    assert "fold_id" in pred_frame.columns
+    assert len(pred_frame) == output.summary.n_samples
+
+
 def test_auto_task_inference(tiny_mixed_df):
     request = TrainRequest(
         dataset_id="ds_test",
@@ -171,4 +203,24 @@ def _tiny_with_missing():
         }
     )
     df.loc[[3, 17, 41], "value"] = np.nan
+    return df
+
+
+def _tiny_mixed_with_date():
+    rng = np.random.default_rng(11)
+    n = 90
+    x1 = rng.normal(0, 1, n)
+    x2 = rng.normal(0, 1, n)
+    df = pd.DataFrame(
+        {
+            "fecha": pd.date_range("2023-01-01", periods=n, freq="D"),
+            "x1": np.round(x1, 4),
+            "x2": np.round(x2, 4),
+            "category": ["red", "green", "blue"] * (n // 3) + ["red", "green"][: n % 3],
+            "value": np.round(3 * x1 - 2 * x2 + 5 + rng.normal(0, 0.4, n), 4),
+            "label": pd.cut(
+                x1 + rng.normal(0, 0.25, n), bins=[-np.inf, -0.33, 0.33, np.inf], labels=["lo", "mid", "hi"]
+            ).astype(str),
+        }
+    )
     return df
