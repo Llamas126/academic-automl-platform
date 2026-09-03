@@ -461,6 +461,8 @@ def _build_predictions_frame(
     out = pd.DataFrame(index=ctx.X.index)
     for col in ctx.feature_names():
         out[col] = ctx.X[col].values
+    for col, series in ctx.context_columns.items():
+        out[col] = series.to_numpy()
     out["fold_id"] = fold_assignment
     for spec in ctx.specs:
         artifact = artifacts.get(spec.name)
