@@ -125,6 +125,19 @@ def compute_regression_metrics(
     }
 
 
+def format_error_margin(mae: float, mape: float | None, unit: str = "kg") -> str | None:
+    """Human-readable 'Margen de Error Promedio': ``±X.XX <unit> (Y.YY%)``.
+
+    Combines MAE (absolute average deviation, in the target units) and MAPE
+    (relative deviation, percent) into a single interpretable string. Returns
+    ``None`` when MAPE is unavailable or either value is not finite.
+    """
+    if not math.isfinite(mae) or mape is None or not math.isfinite(mape):
+        return None
+    unit_text = f" {unit}" if unit else ""
+    return f"±{mae:,.2f}{unit_text} ({mape:.1f}%)"
+
+
 def aggregate_metric(name: str, folds_values: list[float | None]) -> dict:
     direction = METRIC_DIRECTIONS.get(name, "max")
     clean = [v for v in folds_values if v is not None and np.isfinite(v)]

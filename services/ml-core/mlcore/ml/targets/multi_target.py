@@ -19,6 +19,7 @@ from sklearn.preprocessing import LabelEncoder
 class TargetSpec:
     name: str
     task: str
+    unit: str | None = None
     y_raw: pd.Series = field(repr=False, default=None)
     y_encoded: pd.Series = field(repr=False, default=None)
     label_encoder_classes: list[str] | None = None
@@ -86,7 +87,7 @@ def resolve_targets(df: pd.DataFrame, requests: list[TargetIn]) -> RunContext:
         if error:
             raise ValidationFailedError(f"invalid target '{request.name}': {error}")
 
-        spec = TargetSpec(name=request.name, task=task)
+        spec = TargetSpec(name=request.name, task=task, unit=request.unit)
         if task == "classification":
             encoder = LabelEncoder()
             encoded = pd.Series(encoder.fit_transform(series.astype(str)), index=series.index)

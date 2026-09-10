@@ -18,6 +18,7 @@ from mlcore.ml.metrics.calculator import (
     aggregate_metric,
     compute_classification_metrics,
     compute_regression_metrics,
+    format_error_margin,
     primary_metric,
 )
 from mlcore.ml.models.registry import ModelEntry, UnknownModelError, resolve_entries
@@ -271,6 +272,21 @@ def _compute_metrics_for(task, y_true, y_pred, proba, n_features):
     return compute_regression_metrics(y_true, y_pred, n_features)
 
 
+def _error_margin_for(model_result: ModelResult, spec: TargetSpec) -> str | None:
+    """Derive the interpretable 'Margen de Error Promedio' from MAE/MAPE aggregates.
+
+    Only meaningful for regression targets; classification models yield ``None``.
+    """
+    if spec.task != "regression":
+        return None
+    by_metric = {agg.metric: agg for agg in model_result.metrics}
+    mae_agg = by_metric.get("mae")
+    mape_agg = by_metric.get("mape")
+    if mae_agg is None or mape_agg is None:
+        return None
+    return format_error_margin(mae_agg.mean, mape_agg.mean, spec.unit or "kg")
+
+
 def _round_metrics(metrics: dict) -> dict:
     return {k: (None if v is None else float(v)) for k, v in metrics.items()}
 
@@ -342,7 +358,16 @@ def run_training(
         ranked = sorted(model_results, key=lambda r: r.primary_mean, reverse=(direction == "max"))
         for position, model_result in enumerate(ranked, start=1):
             model_result.rank = position
+        for model_result in ranked:
+            model_result.avg_error_margin = _error_margin_for(model_result, spec)
         best_result = ranked[0]
+        logger.info(
+            "[job %s] target=%s margen_de_error_promedio (best=%s): %s",
+            job_id,
+            spec.name,
+            best_result.model,
+            best_result.avg_error_margin,
+        )
         winning_entry = next(e for e in entries if e.display_name == best_result.model)
         best_key = winning_entry.key
         best_pred, best_proba = oof_by_model[best_result.model]

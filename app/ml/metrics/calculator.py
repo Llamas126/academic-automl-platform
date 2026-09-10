@@ -4,6 +4,7 @@
     better_than,
     compute_classification_metrics,
     compute_regression_metrics,
+    format_error_margin,
     primary_metric,
 )
 
@@ -13,6 +14,7 @@ __all__ = [
     "better_than",
     "compute_classification_metrics",
     "compute_regression_metrics",
+    "format_error_margin",
     "primary_metric",
 ]
 
