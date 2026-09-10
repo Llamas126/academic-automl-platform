@@ -7,6 +7,7 @@ from app.ml.metrics.calculator import (
     better_than,
     compute_classification_metrics,
     compute_regression_metrics,
+    format_error_margin,
     primary_metric,
 )
 
@@ -78,3 +79,21 @@ def test_direction_semantics():
 def test_primary_metric_names():
     assert primary_metric("classification") == "f1_macro"
     assert primary_metric("regression") == "rmse"
+
+
+def test_format_error_margin_default_unit():
+    assert format_error_margin(2203.456, 18.53) == "±2,203.46 kg (18.5%)"
+
+
+def test_format_error_margin_custom_unit():
+    assert format_error_margin(0.126, 4.267, unit="mg") == "±0.13 mg (4.3%)"
+
+
+def test_format_error_margin_no_unit_when_empty():
+    assert format_error_margin(12.5, 9.9, unit="") == "±12.50 (9.9%)"
+
+
+def test_format_error_margin_none_when_mape_missing():
+    assert format_error_margin(12.5, None) is None
+    assert format_error_margin(float("nan"), 9.9) is None
+    assert format_error_margin(12.5, float("inf")) is None

@@ -78,6 +78,7 @@ def test_metrics_table_tex_structure(tiny_frame):
                 model="ridge",
                 primary_metric="rmse",
                 primary_mean=1.5,
+                avg_error_margin="±2,203 kg (18.5%)",
                 rank=1,
                 metrics=[agg(1.5, 0.1)],
             ),
@@ -95,6 +96,9 @@ def test_metrics_table_tex_structure(tiny_frame):
     assert "\\toprule" in tex and "\\bottomrule" in tex
     assert "\\textbf{" in tex
     assert "\\label{tab:regression_score}" in tex
+    assert "Margen de error promedio" in tex
+    assert "$\\pm$2,203 kg (18.5\\%)" in tex
+    assert "& -- \\\\" in tex
 
 
 def test_references_bibtex_includes_versions_and_skips_unknown():

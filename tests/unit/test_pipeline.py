@@ -60,6 +60,13 @@ def test_run_training_single_mode_no_hpo(tiny_mixed_df):
         assert target_results.best_model == best.model
         for metric in best.metrics:
             assert metric.ci95_low <= metric.mean + 1e-12 <= metric.ci95_high + 1e-12
+        if target_results.task == "regression":
+            assert all(
+                m.avg_error_margin is not None and m.avg_error_margin.startswith("±")
+                for m in target_results.models
+            )
+        else:
+            assert all(m.avg_error_margin is None for m in target_results.models)
 
     pred_frame = output.predictions_frame
     assert len(pred_frame) == len(tiny_mixed_df)
