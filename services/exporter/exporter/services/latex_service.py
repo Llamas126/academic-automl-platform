@@ -49,6 +49,12 @@ def _safe_label(name: str) -> str:
     return "".join(ch if ch.isalnum() or ch == "-" else "_" for ch in name).lower()
 
 
+def _margin_to_tex(value: str | None) -> str:
+    if value is None:
+        return "--"
+    return escape_latex(value).replace("±", "$\\pm$")
+
+
 def best_values_by_metric(models: list[ModelResult]) -> dict[str, tuple[float, int]]:
     best: dict[str, tuple[float, int]] = {}
     for model in models:
@@ -80,26 +86,30 @@ def metrics_table_tex(target_results: TargetResults, n_samples: int, cv_mode: st
 
     directions = {agg.metric: agg.direction for model in target_results.models for agg in model.metrics}
 
+    show_margin = target_results.task == "regression"
     best = best_values_by_metric(target_results.models)
     label = f"tab:{target_results.task}_{_safe_label(target_results.target)}"
+    caption_note = " Margen de error promedio = MAE (MAPE)." if show_margin else "."
     caption = (
         f"Out-of-fold test performance across {n_folds} "
         f"{'nested' if cv_mode == 'nested' else 'standard'} cross-validation folds "
         f"for target \\texttt{{{escape_latex(target_results.target)}}} "
         f"(n={n_samples}; mean $\\pm$ standard deviation; "
-        "best mean per metric in bold)."
+        f"best mean per metric in bold){caption_note}"
     )
 
     header_cells = ["Model"] + [
         f"{escape_latex(metric)} {metric_arrow(directions[metric])}" for metric in ordered_metrics
     ]
+    if show_margin:
+        header_cells.append("Margen de error promedio")
     lines = [
         "\\begin{table}[htbp]",
         "\\centering",
         f"\\caption{{{caption}}}",
         f"\\label{{{label}}}",
         "\\small",
-        "\\begin{tabular}{l" + "r" * len(ordered_metrics) + "}",
+        "\\begin{tabular}{l" + "r" * len(ordered_metrics) + ("l" if show_margin else "") + "}",
         "\\toprule",
         " & ".join(header_cells) + " \\\\",
         "\\midrule",
@@ -118,6 +128,8 @@ def metrics_table_tex(target_results: TargetResults, n_samples: int, cv_mode: st
             if best_entry is not None and best_entry[1] == model.rank and math.isfinite(agg.mean):
                 cell = f"\\textbf{{{cell}}}"
             cells.append(cell)
+        if show_margin:
+            cells.append(_margin_to_tex(model.avg_error_margin))
         lines.append(" & ".join(cells) + " \\\\")
 
     lines.extend(
