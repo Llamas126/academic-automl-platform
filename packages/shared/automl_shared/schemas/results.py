@@ -20,6 +20,7 @@ class ModelResult(BaseModel):
     best_params: dict[str, Any] = Field(default_factory=dict)
     primary_metric: str
     primary_mean: float
+    avg_error_margin: str | None = None
     rank: int
     metrics: list[MetricAggregate]
 

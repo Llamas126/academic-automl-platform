@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class TargetIn(BaseModel):
     name: str
     task: Literal["auto", "classification", "regression"] = "auto"
+    unit: str | None = None
 
 
 class CVConfig(BaseModel):
