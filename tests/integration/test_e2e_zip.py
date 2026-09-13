@@ -85,8 +85,9 @@ def test_end_to_end_zip_bundle(client: TestClient):
     missing = [prefix for prefix in expected_prefixes if not any(n.startswith(prefix) for n in names)]
     assert not missing, f"missing: {missing}"
 
-    shap_figures = [n for n in names if "/shap/" in n and n.endswith(".png")]
-    assert shap_figures, f"no SHAP figures in {sorted(names)}"
+    shap_figures = [n for n in names if "/shap" in n and n.endswith(".png")]
+    assert shap_figures, f"no per-model SHAP figures in {sorted(names)}"
+    assert not any("/shap/" in n for n in names), "legacy target-level SHAP figures should be gone"
 
     def _figs_for(target: str) -> list[str]:
         return [n for n in names if n.startswith(f"figures/{target}/") and n.endswith(".png")]

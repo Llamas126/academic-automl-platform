@@ -189,3 +189,50 @@ def test_decision_tree_flowchart_non_tree_returns_none():
     estimator = Ridge().fit(Xt, target)
     fig = decision_tree_flowchart_figure(estimator, feature_names, "Ridge", task="regression")
     assert fig is None
+
+
+def test_decision_tree_flowchart_spreads_four_leaves_horizontally():
+    from matplotlib.patches import FancyBboxPatch
+    from sklearn.ensemble import RandomForestRegressor
+
+    Xt, feature_names, target, _classes = _small_mixed_tree_data()
+    estimator = RandomForestRegressor(max_depth=5, n_estimators=2, random_state=0).fit(Xt, target)
+    fig = decision_tree_flowchart_figure(
+        estimator,
+        feature_names,
+        "Random Forest",
+        target="produccion",
+        task="regression",
+        max_depth=2,
+    )
+    assert fig is not None
+    ax = fig.axes[0]
+    boxes = [(box.get_x(), box.get_y()) for box in ax.patches if isinstance(box, FancyBboxPatch)]
+    boxes.sort(key=lambda point: float(point[1]))
+    leaf_row = boxes[:4]
+    leaf_x_edges = sorted(round(float(x), 2) for x, _ in leaf_row)
+    expected_gap = round(12.0 / 4.0, 2)
+    assert [round(leaf_x_edges[i + 1] - leaf_x_edges[i], 2) for i in range(len(leaf_x_edges) - 1)] == [
+        expected_gap
+    ] * 3, leaf_x_edges
+    assert leaf_x_edges[0] < 12.0 / 8.0, leaf_x_edges
+    assert len({round(float(y), 2) for _, y in leaf_row}) == 1, "pruned leaves must share a row"
+    _close(fig)
+
+
+def test_decision_tree_flowchart_canvas_is_12x6():
+    from sklearn.ensemble import RandomForestRegressor
+
+    Xt, feature_names, target, _classes = _small_mixed_tree_data()
+    estimator = RandomForestRegressor(max_depth=5, n_estimators=2, random_state=0).fit(Xt, target)
+    fig = decision_tree_flowchart_figure(
+        estimator,
+        feature_names,
+        "Random Forest",
+        target="produccion",
+        task="regression",
+        max_depth=2,
+    )
+    assert fig is not None
+    assert fig.get_size_inches().tolist() == [12.0, 6.0]
+    _close(fig)

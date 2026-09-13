@@ -346,9 +346,8 @@ def decision_tree_flowchart_figure(
     leaves = [n for n in limited.values() if n["is_leaf"]]
     n_leaves = max(len(leaves), 1)
 
-    width = 2.2 * n_leaves
-    height = 1.55 * (max((n["depth"] for n in limited.values()), default=1) + 1) + 0.8
-    fig, ax = plt.subplots(figsize=(min(width, 16.0), min(height, 10.0)))
+    width, height = 12.0, 6.0
+    fig, ax = plt.subplots(figsize=(width, height))
     ax.set_xlim(0, width)
     ax.set_ylim(0, height)
     ax.set_xticks([])
@@ -356,14 +355,15 @@ def decision_tree_flowchart_figure(
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    positions = _compute_tree_positions(limited, width)
-    node_size = min(0.85, max(0.5, 10.5 / n_leaves))
+    positions = _compute_tree_positions(limited, width, height)
+    spacing_x = width / n_leaves
+    node_size = min(0.85, max(0.45, spacing_x * 0.22))
     font = _node_font(n_leaves)
 
     if tree.get("subtitle") is not None:
         ax.text(
             width / 2,
-            height - 0.18,
+            height - 0.32,
             tree["subtitle"],
             ha="center",
             va="top",
@@ -436,7 +436,7 @@ def decision_tree_flowchart_figure(
     title = f"Cómo decide el modelo: {model_name}"
     if target is not None:
         title = f"Cómo decide el modelo ({target}): {model_name}"
-    ax.text(width / 2, height - 0.28, title, ha="center", va="top", fontsize=11, fontweight="bold")
+    ax.text(width / 2, height - 0.5, title, ha="center", va="top", fontsize=11, fontweight="bold")
     fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.96])
     return fig
 
@@ -490,14 +490,14 @@ def _tree_from_xgboost(estimator) -> dict | None:
     return {"root": 0, "nodes": nodes, "subtitle": "Primer árbol del modelo (nivel de detalle simplificado)"}
 
 
-def _walk_xgboost(raw: dict, nodes: dict[int, dict]) -> None:
+def _walk_xgboost(raw: dict, nodes: dict[int, dict], depth: int = 0) -> None:
     node_id = int(raw["nodeid"])
     if "leaf" in raw:
         nodes[node_id] = {
             "id": node_id,
             "is_leaf": True,
             "is_xgb": True,
-            "depth": int(raw.get("depth", 0)),
+            "depth": depth,
             "value": float(raw["leaf"]),
             "cover": float(raw.get("cover", 0.0)),
             "left": None,
@@ -511,7 +511,7 @@ def _walk_xgboost(raw: dict, nodes: dict[int, dict]) -> None:
     nodes[node_id] = {
         "id": node_id,
         "is_leaf": False,
-        "depth": int(raw.get("depth", 0)),
+        "depth": depth,
         "split_idx": split_idx,
         "feature": None,
         "threshold": _parse_threshold(raw.get("split_condition")),
@@ -521,7 +521,7 @@ def _walk_xgboost(raw: dict, nodes: dict[int, dict]) -> None:
         "value": None,
     }
     for child in raw.get("children") or []:
-        _walk_xgboost(child, nodes)
+        _walk_xgboost(child, nodes, depth + 1)
 
 
 def _xgboost_feature_index(split: str) -> int:
@@ -590,13 +590,13 @@ def _tree_from_lightgbm(estimator) -> dict | None:
     return {"root": 0, "nodes": nodes, "subtitle": "Primer árbol del modelo (nivel de detalle simplificado)"}
 
 
-def _walk_lightgbm(raw: dict, nodes: dict[int, dict]) -> None:
+def _walk_lightgbm(raw: dict, nodes: dict[int, dict], depth: int = 0) -> None:
     node_id = int(raw.get("node_index") or len(nodes))
     if raw.get("leaf_value") is not None:
         nodes[node_id] = {
             "id": node_id,
             "is_leaf": True,
-            "depth": int(raw.get("depth", 0)),
+            "depth": depth,
             "value": float(raw["leaf_value"]),
             "cover": float(raw.get("internal_count") or raw.get("leaf_count") or 0.0),
             "left": None,
@@ -613,7 +613,7 @@ def _walk_lightgbm(raw: dict, nodes: dict[int, dict]) -> None:
     nodes[node_id] = {
         "id": node_id,
         "is_leaf": False,
-        "depth": int(raw.get("depth", 0)),
+        "depth": depth,
         "split_idx": int(split_idx),
         "feature": feature,
         "threshold": float(raw.get("threshold")),
@@ -628,18 +628,24 @@ def _walk_lightgbm(raw: dict, nodes: dict[int, dict]) -> None:
             continue
         kid = int(child.get("node_index") or len(nodes))
         nodes[node_id][tag] = kid
-        _walk_lightgbm(child, nodes)
+        _walk_lightgbm(child, nodes, depth + 1)
 
 
 def _limit_tree_depth(tree: dict, max_depth: int) -> dict:
+    """Keep only nodes up to ``max_depth``, turning cutoff nodes into leaves.
+
+    Nodes strictly deeper than ``max_depth`` are dropped, and every node that
+    lands exactly on the cutoff becomes a terminal leaf (its children are
+    discarded and its ``depth`` is normalized so the whole leaf row aligns).
+    """
     nodes = tree["nodes"]
     if max_depth <= 0:
         return nodes
-    shallow = {
-        node_id: dict(node)
-        for node_id, node in nodes.items()
-        if node["depth"] <= max_depth or node["is_leaf"]
-    }
+    shallow: dict[int, dict] = {}
+    for node_id, node in nodes.items():
+        if node["depth"] > max_depth:
+            continue
+        shallow[node_id] = dict(node)
     for node in shallow.values():
         if node["depth"] == max_depth:
             node["left"] = None
@@ -754,21 +760,34 @@ def _format_leaf(node: dict, task: str, class_names: list[str] | None) -> str:
     return f"Pred. ≈ {_format_number(float(arr.reshape(-1)[0]))}"
 
 
-def _compute_tree_positions(nodes: dict, width: float) -> dict[int, tuple[float, float]]:
+def _compute_tree_positions(nodes: dict, width: float, height: float) -> dict[int, tuple[float, float]]:
+    """Lay the tree out in normalized space and scale it onto the canvas.
+
+    Leaves spread horizontally by ``(index + 0.5) / n_leaves`` (for the
+    pruned depth-2 tree with 4 leaves this yields 0.125 / 0.375 / 0.625 /
+    0.875), internal nodes sit above the midpoint of their children and the
+    ``y`` axis descends per depth level between the top and bottom margins.
+    """
     leaves: list[tuple[int, int]] = []
     _collect_leaves(nodes, 0, leaves)
     n_leaves = max(len(leaves), 1)
-    positions: dict[int, tuple[float, float]] = {}
     depths = {n["depth"] for n in nodes.values()}
-    max_depth = max(depths, default=0)
-    top = 0.78
+    tree_depth = max(depths, default=0)
+
+    top_margin = 0.7 / height
+    bottom_margin = 0.5 / height
+    span = 1.0 - top_margin - bottom_margin
+
+    def level_span(current: int) -> float:
+        return bottom_margin + (span * (tree_depth - current)) / max(tree_depth, 1)
+
+    positions: dict[int, tuple[float, float]] = {}
     for index, (node_id, depth) in enumerate(leaves):
-        x = (index + 0.5) * width / n_leaves
-        y = top + (max_depth - depth) * 1.1
-        positions[node_id] = (x, y)
-    for depth in range(max_depth - 1, -1, -1):
-        nodes_at_level = [n for n in nodes.values() if n["depth"] == depth and not n["is_leaf"]]
-        for node in nodes_at_level:
+        positions[node_id] = ((index + 0.5) * width / n_leaves, level_span(depth) * height)
+    for depth in range(tree_depth - 1, -1, -1):
+        for node in nodes.values():
+            if node["depth"] != depth or node["is_leaf"]:
+                continue
             left = positions.get(node["left"])
             right = positions.get(node["right"])
             if left and right:
@@ -779,11 +798,7 @@ def _compute_tree_positions(nodes: dict, width: float) -> dict[int, tuple[float,
                 x = right[0]
             else:
                 x = width / 2
-            positions[node["id"]] = (x, top + (max_depth - depth) * 1.1)
-    for node in nodes.values():
-        if node["id"] not in positions:
-            x = positions.get(node["left"], (width / 2, 0))[0] if node.get("left") in positions else width / 2
-            positions[node["id"]] = (x, top + (max_depth - node["depth"]) * 1.1)
+            positions[node["id"]] = (x, level_span(depth) * height)
     return positions
 
 

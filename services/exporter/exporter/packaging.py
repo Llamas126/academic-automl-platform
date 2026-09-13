@@ -64,7 +64,7 @@ def package_from_contract(
 
     shap_notes: dict[str, str] = {}
     if request.explain.shap:
-        shap_notes = _scan_shap_notes(out_dir, artifacts)
+        shap_notes = _scan_shap_notes(interpretability_paths)
         if not shap_notes:
             summary.warnings.append("SHAP analysis was requested but produced no figures.")
 
@@ -95,16 +95,18 @@ def package_from_contract(
     return zip_path
 
 
-def _scan_shap_notes(out_dir: Path, artifacts: dict) -> dict[str, str]:
-    """Describe pre-rendered SHAP figures produced by the explainability stage."""
+def _scan_shap_notes(figures_by_target: dict[str, list[str]]) -> dict[str, str]:
+    """Describe the per-model SHAP figures using the exporter's own listing."""
     notes: dict[str, str] = {}
-    for target_name, artifact in artifacts.items():
-        shap_dir = out_dir / "figures" / target_name.replace("/", "_") / "shap"
-        png_count = len(list(shap_dir.glob("*.png")))
-        if png_count:
+    for target_name, rels in figures_by_target.items():
+        basenames = [rel.rsplit("/", 1)[-1] for rel in rels]
+        shap_count = sum(
+            1 for name in basenames if name.startswith(("shap_importance_", "shap_beeswarm_"))
+        )
+        if shap_count:
             notes[target_name] = (
-                f"{png_count} SHAP figure(s) generated under "
-                f"figures/{target_name}/shap/ (explainer={artifact.explainer_kind})."
+                f"{shap_count} per-model SHAP figure(s) generated "
+                f"(explainer figures under figures/{target_name})."
             )
     return notes
 

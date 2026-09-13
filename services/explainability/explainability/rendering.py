@@ -1,7 +1,8 @@
-"""SHAP rendering entrypoint for the explainability stage.
+"""Interpretability entrypoint for the explainability stage.
 
 Loads the verified model artifacts and the background sample written by the
-ML core, renders SHAP figures into the job output tree, and degrades
+ML core, persists the per-model interpretability profiles (coefficients /
+SHAP / feature-importance) that the exporter turns into figures, and degrades
 gracefully: any failure is logged and reported through a status file instead
 of failing the orchestration chain.
 """
@@ -26,17 +27,19 @@ INTERPRETABILITY_DIR_NAME = "interpretability"
 def render_shap_figures_if_requested(work_dir: Path, out_dir: Path, request: TrainRequest) -> dict[str, int]:
     """Render SHAP figures when ``request.explain.shap`` is enabled.
 
-    Returns a mapping target -> png count. Never raises: on error it writes
-    ``work/shap_status.json`` with ``ok=false`` so downstream stages can rely
-    on filesystem state only.
+    The legacy in-place SHAP figure stage was removed: per-model figures are
+    rendered uniformly by the exporter from the interpretability profiles
+    (``coef_plot_*``, ``shap_importance_*``, ``shap_beeswarm_*``). This
+    entrypoint persists those profiles and reports a target -> profiled-model
+    count. Never raises: on error it writes ``work/shap_status.json`` with
+    ``ok=false`` so downstream stages can rely on filesystem state only.
     """
     if not request.explain.shap:
         return {}
     try:
-        counts = _render_all(work_dir, out_dir, request)
-        render_interpretability_profiles_if_requested(work_dir, out_dir, request)
-        _write_status(work_dir, ok=True, rendered=counts)
-        return counts
+        counts = render_interpretability_profiles_if_requested(work_dir, out_dir, request)
+        _write_status(work_dir, ok=True, rendered={"profiles": counts})
+        return {"profiles": counts}
     except Exception as exc:
         logger.warning("SHAP stage failed for job: %s", exc, exc_info=True)
         _write_status(work_dir, ok=False, error=str(exc))
@@ -60,44 +63,6 @@ def render_interpretability_profiles_if_requested(
     except Exception as exc:
         logger.warning("interpretability profiling failed for job: %s", exc, exc_info=True)
         return 0
-
-
-def _render_all(work_dir: Path, out_dir: Path, request: TrainRequest) -> dict[str, int]:
-    from explainability.shap_engine import build_shap_figures
-
-    models_dir = out_dir / "models"
-    verify_model_integrity(models_dir)
-    meta = load_training_meta(work_dir)
-    background = load_background_frame(work_dir)
-    if background is None:
-        raise FileNotFoundError("background sample missing from training contract")
-
-    import joblib
-
-    counts: dict[str, int] = {}
-    for entry in meta["targets"]:
-        name = entry["target"]
-        payload_path = models_dir / f"{safe_target_stem(name)}_best_model.joblib"
-        payload = joblib.load(payload_path)
-        pipeline = payload.get("pipeline")
-        if pipeline is None:
-            continue
-        shap_dir = out_dir / "figures" / name.replace("/", "_") / "shap"
-        written = build_shap_figures(
-            pipeline=pipeline,
-            X_background=background,
-            explainer_kind=entry["explainer_kind"],
-            target_name=name,
-            out_dir=shap_dir,
-            dpi=request.export.figures_dpi,
-            include_eps=request.export.include_eps,
-            include_dependence=request.export.include_shap_dependence,
-            max_display=request.explain.max_display or 20,
-        )
-        png_count = sum(1 for p in written if p.suffix == ".png")
-        if png_count:
-            counts[name] = png_count
-    return counts
 
 
 def _render_profiles_all(work_dir: Path, out_dir: Path, request: TrainRequest) -> int:

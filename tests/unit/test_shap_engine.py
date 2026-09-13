@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -6,10 +9,9 @@ from sklearn.pipeline import Pipeline
 
 from app.ml.explainability.shap_engine import (
     build_interpretability_profile,
-    build_shap_figures,
+    compute_shap_values,
 )
 from app.ml.preprocessing.builders import build_preprocessor
-from app.services import figure_service
 
 
 def _fitted_ridge_pipeline():
@@ -28,37 +30,65 @@ def _fitted_ridge_pipeline():
     return pipe, X
 
 
-def test_shap_linear_produces_png_and_eps(tmp_path):
+def _training_meta(targets: list[dict]) -> dict:
+    return {"schema_version": 1, "targets": targets}
+
+
+def _write_contract(tmp_path, targets: list[dict], pipelines: dict[str, object]) -> Path:
+    import joblib
+    from automl_shared.contract import META_NAME, safe_target_stem
+
+    (tmp_path / "models").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "models" / "job.db").write_text("mock-db", encoding="utf-8")
+    (tmp_path / META_NAME).write_text(json.dumps(_training_meta(targets)), encoding="utf-8")
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    for name, pipe in pipelines.items():
+        joblib.dump({"pipeline": pipe}, tmp_path / "models" / f"{safe_target_stem(name)}_best_model.joblib")
+    return tmp_path
+
+
+def test_compute_shap_values_linear_returns_arrays():
     pipe, X = _fitted_ridge_pipeline()
-    figure_service.configure_publication_style(300)
-    written = build_shap_figures(
-        pipe,
-        X.head(60),
-        explainer_kind="linear",
-        target_name="score",
-        out_dir=tmp_path,
-        include_eps=True,
-        include_dependence=True,
-        max_display=10,
+    result = compute_shap_values(pipe, X.head(60), "linear")
+    assert result is not None
+    values, multiclass, eval_data, feature_names = result
+    assert multiclass is False
+    assert values.shape == eval_data.shape
+    assert len(feature_names) == values.shape[1]
+
+
+def test_render_profiles_persists_without_legacy_figures(tmp_path):
+    from explainability.rendering import render_interpretability_profiles_if_requested
+
+    from app.schemas.training import TrainRequest
+
+    pipe, X = _fitted_ridge_pipeline()
+    _write_contract(
+        tmp_path,
+        [{"target": "score", "best_entry_key": "ridge_regression", "explainer_kind": "linear"}],
+        {"score": pipe},
     )
-    stems = {p.name for p in written}
-    assert "shap_importance_score.png" in stems
-    assert "shap_importance_score.eps" in stems
-    assert any(n.startswith("shap_beeswarm") for n in stems)
-    for path in written:
-        assert path.stat().st_size > 500
+    X.to_csv(tmp_path / "background.csv", index=False)
+    request = TrainRequest(
+        dataset_id="ds_test",
+        targets=[{"name": "score", "task": "regression"}],
+        models=["ridge_regression"],
+    )
 
+    profiled = render_interpretability_profiles_if_requested(
+        work_dir=tmp_path, out_dir=tmp_path, request=request
+    )
+    assert profiled == 1
 
-def test_shap_failure_degrades_gracefully(tmp_path):
-    from sklearn.dummy import DummyRegressor
+    profiled_file = tmp_path / "interpretability" / "score.json"
+    assert profiled_file.exists()
+    index = json.loads(profiled_file.read_text(encoding="utf-8"))
+    assert index["target"] == "score"
+    assert len(index["models"]) == 1
+    assert index["models"][0]["coefficients"] is not None
 
-    rng = np.random.default_rng(1)
-    X = pd.DataFrame({"a": rng.normal(size=40)})
-    y = rng.normal(size=40)
-    pipe = Pipeline([("preprocess", build_preprocessor(["a"], [], False)), ("estimator", DummyRegressor())])
-    pipe.fit(X, y)
-    written = build_shap_figures(pipe, X, "tree", "y", tmp_path, max_display=5)
-    assert written == []
+    legacy = list(tmp_path.rglob("shap_importance_*.png")) + list(tmp_path.rglob("shap_beeswarm_*.png"))
+    assert legacy == [], "legacy SHAP figures must no longer be generated"
 
 
 def _fitted_rf_multiclass_pipeline():
