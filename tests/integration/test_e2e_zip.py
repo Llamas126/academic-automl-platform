@@ -88,8 +88,37 @@ def test_end_to_end_zip_bundle(client: TestClient):
     shap_figures = [n for n in names if "/shap/" in n and n.endswith(".png")]
     assert shap_figures, f"no SHAP figures in {sorted(names)}"
 
+    def _figs_for(target: str) -> list[str]:
+        return [n for n in names if n.startswith(f"figures/{target}/") and n.endswith(".png")]
+
+    for target in ("score_continuous", "passed_threshold"):
+        figs = _figs_for(target)
+        basenames = {n.rsplit("/", 1)[-1] for n in figs}
+        assert "model_feature_importance_comparison.png" in basenames, figs
+        assert any(n.startswith("coef_plot_") for n in basenames), figs
+        assert any(n.startswith("shap_importance_") for n in basenames), figs
+
+    score_figs = {n.rsplit("/", 1)[-1] for n in _figs_for("score_continuous")}
+    assert any(n.startswith("shap_beeswarm_") for n in score_figs), score_figs
+
+    tree_flowcharts = [n for n in names if "/decision_tree_flowchart_" in n and n.endswith(".png")]
+    assert (
+        "figures/passed_threshold/decision_tree_flowchart_random_forest_classifier.png" in tree_flowcharts
+    ), f"expected the decision-tree flowchart for the tree winner (passed_threshold): {tree_flowcharts}"
+
+    model_paths = [n for n in names if n.startswith("models/") and n.endswith(".joblib")]
+    best_models = [n for n in model_paths if n.endswith("_best_model.joblib")]
+    candidate_models = [n for n in model_paths if not n.endswith("_best_model.joblib")]
+    assert len(best_models) == 2, model_paths
+    assert len(candidate_models) == 2, model_paths
+    for target in ("score_continuous", "passed_threshold"):
+        assert any(n.startswith(f"models/{target}_") for n in candidate_models), candidate_models
+
     manifest = bundle.read("MANIFEST.txt").decode("utf-8")
     assert "job_id" in manifest and "Library versions" in manifest
+
+    report_tex = bundle.read("report/report.tex").decode("utf-8")
+    assert "../figures/passed_threshold/decision_tree_flowchart_random_forest_classifier.png" in report_tex
 
     summary = json.loads(bundle.read("metrics/results_summary.json"))
     tasks = {t["target"]: t["task"] for t in summary["targets"]}

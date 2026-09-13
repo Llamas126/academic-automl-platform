@@ -18,13 +18,26 @@ from app.services.package_service import export_and_package
 
 @pytest.fixture
 def tiny_frame():
-    rng = pd.Series(range(90))
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    x1 = np.linspace(-3.0, 3.0, 90)
+    grp = np.array(["a", "b", "c"] * 30)
+    # Non-linear target on purpose: RandomForest must beat Ridge here so the
+    # export test exercises the decision-tree flowchart path deterministically.
+    score = (
+        3.0
+        + np.sin(x1 * 1.1)
+        + 2.0 * (grp == "a")
+        - 1.5 * (grp == "c")
+        + rng.normal(scale=0.25, size=90)
+    )
     return pd.DataFrame(
         {
-            "x1": rng.map(lambda v: v * 0.1),
-            "grp": ["a", "b", "c"] * 30,
-            "score_continuous": rng.map(lambda v: 2.0 + 0.5 * v),
-            "grade": ["low", "mid", "high"] * 30,
+            "x1": x1,
+            "grp": grp,
+            "score_continuous": score,
+            "grade": np.where(score > 3.4, "high", np.where(score > 2.6, "mid", "low")),
         }
     )
 
@@ -155,6 +168,34 @@ def test_export_and_package_zip_layout(tmp_path, tiny_frame):
     missing = {name for name in required if name not in names}
     assert not missing, f"missing entries: {missing}"
 
+    interp_required = {
+        "figures/score_continuous/coef_plot_ridge_regression.png",
+        "figures/score_continuous/shap_importance_random_forest_regressor.png",
+        "figures/score_continuous/shap_beeswarm_random_forest_regressor.png",
+        "figures/score_continuous/model_feature_importance_comparison.png",
+        "figures/grade/coef_plot_logistic_regression.png",
+        "figures/grade/shap_importance_random_forest_classifier.png",
+        "figures/grade/model_feature_importance_comparison.png",
+        "models/score_continuous_best_model.joblib",
+        "models/grade_best_model.joblib",
+    }
+    missing_interp = {name for name in interp_required if name not in names}
+    assert not missing_interp, f"missing per-model interpretability entries: {missing_interp}"
+
+    comparison_count = [n for n in names if n.endswith("model_feature_importance_comparison.png")]
+    assert len(comparison_count) == 2, "expected one consolidated comparison matrix per target"
+
+    tree_flowcharts = [
+        n
+        for n in names
+        if "/decision_tree_flowchart_" in n and n.endswith(".png") and "figures/" in n
+    ]
+    assert len(tree_flowcharts) == 2, (
+        f"expected one decision-tree flowchart per tree-winning target: {tree_flowcharts}"
+    )
+    assert "figures/score_continuous/decision_tree_flowchart_random_forest_regressor.png" in tree_flowcharts
+    assert "figures/grade/decision_tree_flowchart_random_forest_classifier.png" in tree_flowcharts
+
     summary = json.loads(zipfile.ZipFile(zip_path).read("metrics/results_summary.json"))
     assert len(summary["targets"]) == 2
 
@@ -167,3 +208,6 @@ def test_export_and_package_zip_layout(tmp_path, tiny_frame):
     report_tex = zipfile.ZipFile(zip_path).read("report/report.tex").decode("utf-8")
     assert "\\begin{abstract}" in report_tex
     assert "\\bibliography{../bib/references}" in report_tex
+    for tree_png in tree_flowcharts:
+        assert f"../{tree_png}" in report_tex
+    assert "decision-tree flowchart" in report_tex

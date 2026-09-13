@@ -52,6 +52,12 @@ def package_from_contract(
     artifacts = load_target_views(work_dir, models_dir)
 
     figure_paths_by_target = _export_diagnostics_figures(out_dir, artifacts, per_fold_records, request)
+    interpretability_paths = _export_interpretability_figures(work_dir, out_dir, request)
+    for target, rels in interpretability_paths.items():
+        figure_paths_by_target.setdefault(target, []).extend(rels)
+    tree_paths = _export_decision_tree_figures(out_dir, artifacts, request)
+    for target, rels in tree_paths.items():
+        figure_paths_by_target.setdefault(target, []).extend(rels)
     figure_paths_by_target = {
         target: [f"../{rel}" for rel in rels] for target, rels in figure_paths_by_target.items()
     }
@@ -156,6 +162,199 @@ def _export_diagnostics_figures(
             safe_stem = _safe_stem(target_name)
             written.extend(
                 save_figure(box_fig, fig_dir, f"boxplot_{primary}_{safe_stem}", include_eps)
+            )
+
+        relative_paths[target_name] = [
+            f"figures/{p.parent.name}/{p.name}" for p in written if p.suffix == ".png"
+        ]
+    return relative_paths
+
+
+def _export_decision_tree_figures(
+    out_dir: Path, artifacts: dict, request: TrainRequest
+) -> dict[str, list[str]]:
+    """Render the simplified "Sí / No" decision-tree flowchart for the winner.
+
+    Loads the best model artifact, resolves the fitted tree estimator and
+    draws the first tree as an infographic with real feature names (e.g.
+    ``temp_min < 26.3``). The PNG (and optional EPS) ships under
+    ``figures/<target>/decision_tree_flowchart_<model_key>.png`` and is linked
+    into the LaTeX report. Always degrades gracefully: unsupported or
+    non-tree models are skipped.
+    """
+    import joblib
+
+    from exporter.charts import decision_tree_flowchart_figure, save_figure
+
+    include_eps = request.export.include_eps
+    relative_paths: dict[str, list[str]] = {}
+    models_dir = out_dir / "models"
+
+    for target_name, artifact in artifacts.items():
+        best_key = artifact.best_entry_key
+        if not best_key:
+            continue
+        payload_path = models_dir / f"{_safe_stem(target_name)}_best_model.joblib"
+        if not payload_path.exists():
+            logger.info("best model artifact missing for %s; skipping tree flowchart", target_name)
+            continue
+        try:
+            payload = joblib.load(payload_path)
+            pipeline = payload.get("pipeline")
+        except Exception as exc:
+            logger.warning("could not load best model for %s: %s", target_name, exc)
+            continue
+        if pipeline is None:
+            continue
+
+        estimator = pipeline.named_steps.get("estimator")
+        preprocessor = pipeline.named_steps.get("preprocess")
+        if estimator is None or not _is_tree_estimator(estimator):
+            continue
+
+        if preprocessor is not None and hasattr(preprocessor, "get_feature_names_out"):
+            try:
+                feature_names = [str(name) for name in preprocessor.get_feature_names_out()]
+            except Exception:
+                logger.warning("preprocessed feature names unavailable for %s", target_name)
+                continue
+
+        display_name = payload.get("display_name") or best_key
+        class_names = payload.get("label_classes") or artifact.label_classes
+        task = payload.get("task") or artifact.task
+
+        fig = decision_tree_flowchart_figure(
+            estimator,
+            feature_names,
+            display_name,
+            target=target_name,
+            task=task,
+            class_names=class_names,
+            max_depth=2,
+        )
+        if fig is None:
+            continue
+        fig_dir = out_dir / "figures" / target_name.replace("/", "_")
+        written = save_figure(
+            fig, fig_dir, f"decision_tree_flowchart_{_safe_stem(best_key)}", include_eps
+        )
+        relative_paths[target_name] = [
+            f"figures/{p.parent.name}/{p.name}" for p in written if p.suffix == ".png"
+        ]
+        logger.info("exported decision tree flowchart for %s (%s)", target_name, best_key)
+    return relative_paths
+
+
+def _is_tree_estimator(estimator) -> bool:
+    module = type(estimator).__module__ or ""
+    if module.split(".")[0] in ("xgboost", "lightgbm"):
+        return True
+    return _is_sklearn_tree(estimator)
+
+
+def _is_sklearn_tree(estimator) -> bool:
+    from sklearn.ensemble import (
+        GradientBoostingClassifier,
+        GradientBoostingRegressor,
+        RandomForestClassifier,
+        RandomForestRegressor,
+    )
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+    return isinstance(
+        estimator,
+        (
+            DecisionTreeClassifier,
+            DecisionTreeRegressor,
+            RandomForestClassifier,
+            RandomForestRegressor,
+            GradientBoostingClassifier,
+            GradientBoostingRegressor,
+        ),
+    )
+
+
+def _export_interpretability_figures(
+    work_dir: Path, out_dir: Path, request: TrainRequest
+) -> dict[str, list[str]]:
+    """Render per-model interpretability figures for every evaluated candidate.
+
+    The explainability stage persists compact value profiles (coefficients,
+    SHAP importance, raw SHAP arrays) under ``work/interpretability``; this
+    function turns them into ``coef_plot_*``, ``shap_importance_*``,
+    ``shap_beeswarm_*`` and the consolidated ``model_feature_importance_
+    comparison`` figures so they ship inside the report bundle.
+    """
+    from exporter.charts import (
+        coefficients_figure,
+        feature_importance_figure,
+        model_feature_importance_comparison_figure,
+        save_figure,
+        shap_beeswarm_figure,
+    )
+
+    interp_dir = work_dir / "interpretability"
+    if not interp_dir.exists():
+        logger.info("interpretability profiles not found in %s; skipping per-model figures", interp_dir)
+        return {}
+
+    include_eps = request.export.include_eps
+    relative_paths: dict[str, list[str]] = {}
+
+    for profile_file in sorted(interp_dir.glob("*.json")):
+        try:
+            payload = json.loads(profile_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("could not read interpretability profile %s: %s", profile_file.name, exc)
+            continue
+        target_name = payload.get("target")
+        if not target_name:
+            continue
+        feature_names = payload.get("feature_names") or []
+        fig_dir = out_dir / "figures" / target_name.replace("/", "_")
+        written: list[Path] = []
+        profiles_for_matrix: list[dict] = []
+
+        for model_entry in payload.get("models") or []:
+            key = model_entry.get("key")
+            if not key:
+                continue
+            display_name = model_entry.get("display_name") or key
+            kind = model_entry.get("kind")
+            importance = model_entry.get("importance")
+            if importance is None:
+                continue
+            importance_arr = np.asarray(importance, dtype=float)
+            profiles_for_matrix.append(
+                {"key": key, "display_name": display_name, "importance": importance_arr}
+            )
+
+            coefficients = model_entry.get("coefficients")
+            if kind == "linear" and coefficients is not None:
+                coef_fig = coefficients_figure(
+                    np.asarray(coefficients, dtype=float), feature_names, display_name
+                )
+                written.extend(save_figure(coef_fig, fig_dir, f"coef_plot_{key}", include_eps))
+            elif kind == "tree":
+                source = model_entry.get("source", "intrinsic")
+                imp_fig = feature_importance_figure(
+                    importance_arr, feature_names, display_name, source=source
+                )
+                written.extend(save_figure(imp_fig, fig_dir, f"shap_importance_{key}", include_eps))
+                if not model_entry.get("multiclass") and model_entry.get("shap_file"):
+                    try:
+                        arrays = np.load(interp_dir / model_entry["shap_file"])
+                        swarm_fig = shap_beeswarm_figure(
+                            arrays["shap_values"], arrays["eval_data"], feature_names, display_name
+                        )
+                        written.extend(save_figure(swarm_fig, fig_dir, f"shap_beeswarm_{key}", include_eps))
+                    except (OSError, KeyError) as exc:
+                        logger.warning("beeswarm skipped for %s: %s", key, exc)
+
+        if profiles_for_matrix:
+            matrix_fig = model_feature_importance_comparison_figure(profiles_for_matrix, feature_names)
+            written.extend(
+                save_figure(matrix_fig, fig_dir, "model_feature_importance_comparison", include_eps)
             )
 
         relative_paths[target_name] = [

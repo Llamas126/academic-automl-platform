@@ -34,6 +34,36 @@ def save_final_models(artifacts: dict, models_dir: Path) -> None:
         joblib.dump(payload, models_dir / f"{safe_target}_best_model.joblib")
 
 
+def save_all_models(artifacts: dict, models_dir: Path) -> None:
+    """Persist a refit pipeline for every evaluated candidate model per target.
+
+    The winner is already stored as ``<target>_best_model.joblib`` by
+    ``save_final_models``; this only writes the remaining candidates so every
+    evaluated algorithm can be inspected downstream.
+    """
+    import joblib
+
+    for target_name, artifact in artifacts.items():
+        best_key = artifact.best_entry_key
+        safe_target = _safe_name(target_name)
+        for key, candidate in (getattr(artifact, "candidate_models", None) or {}).items():
+            if key == best_key or candidate.get("pipeline") is None:
+                continue
+            safe_key = _safe_name(key)
+            payload = {
+                "pipeline": candidate["pipeline"],
+                "target": target_name,
+                "task": artifact.task,
+                "model_key": candidate.get("key") or key,
+                "hyperparameters": candidate.get("params"),
+                "label_classes": artifact.label_classes,
+                "display_name": candidate.get("display_name"),
+                "explainer_kind": candidate.get("explainer_kind"),
+                "rank": candidate.get("rank"),
+            }
+            joblib.dump(payload, models_dir / f"{safe_target}_{safe_key}.joblib")
+
+
 def model_digest(path: Path, signing_key: str | None = None) -> str:
     """Streaming SHA-256 of the artifact; HMAC-SHA256 when a key is configured."""
     if signing_key:

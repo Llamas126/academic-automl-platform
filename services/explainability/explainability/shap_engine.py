@@ -61,8 +61,74 @@ def _normalize_values(values) -> tuple[np.ndarray, bool]:
         return np.abs(stacked).mean(axis=0), True
     arr = np.asarray(values)
     if arr.ndim == 3:
-        return np.abs(arr).mean(axis=0), True
+        return np.abs(arr).mean(axis=-1), True
     return arr, False
+
+
+def build_interpretability_profile(
+    pipeline,
+    X_background: pd.DataFrame,
+    explainer_kind: str,
+) -> dict:
+    """Extract the per-model interpretability values the exporter plots from.
+
+    Linear estimators expose raw ``coef_`` (beta weights); tree estimators are
+    explained through SHAP. When SHAP cannot be computed the profile falls back
+    to the estimator's intrinsic ``feature_importances_`` so the exporter can
+    still render an importance figure.
+
+    Returns a dict whose arrays are consumed either as JSON lists (coefficients,
+    importance) or persisted separately as npz (raw SHAP + eval arrays needed
+    by the beeswarm figure).
+    """
+    preprocessor = pipeline.named_steps["preprocess"]
+    estimator = pipeline.named_steps["estimator"]
+
+    feature_names = [str(name) for name in preprocessor.get_feature_names_out()]
+    profile: dict = {
+        "kind": explainer_kind,
+        "feature_names": feature_names,
+        "coefficients": None,
+        "importance": None,
+        "intrinsic_importance": None,
+        "source": "intrinsic",
+        "multiclass": False,
+        "has_shap": False,
+        "shap_values": None,
+        "shap_eval_data": None,
+    }
+
+    if hasattr(estimator, "coef_"):
+        coef = np.asarray(estimator.coef_)
+        profile["coefficients"] = coef
+        if coef.ndim == 1:
+            profile["importance"] = np.abs(coef)
+        else:
+            profile["importance"] = np.abs(coef).max(axis=0)
+
+    if hasattr(estimator, "feature_importances_"):
+        profile["intrinsic_importance"] = np.asarray(estimator.feature_importances_)
+
+    if explainer_kind in ("tree", "linear"):
+        try:
+            result = compute_shap_values(pipeline, X_background, explainer_kind)
+        except Exception as exc:
+            logger.warning("SHAP values unavailable for %s: %s", explainer_kind, exc)
+            result = None
+        if result is not None:
+            values, multiclass, eval_data, shap_names = result
+            profile["feature_names"] = shap_names
+            profile["multiclass"] = multiclass
+            profile["has_shap"] = True
+            profile["source"] = "shap"
+            profile["importance"] = np.abs(values).mean(axis=0)
+            profile["shap_values"] = values
+            profile["shap_eval_data"] = eval_data
+
+    if profile["importance"] is None and profile["intrinsic_importance"] is not None:
+        profile["importance"] = profile["intrinsic_importance"]
+        profile["source"] = "intrinsic"
+    return profile
 
 
 def build_shap_figures(

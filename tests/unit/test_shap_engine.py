@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 
-from app.ml.explainability.shap_engine import build_shap_figures
+from app.ml.explainability.shap_engine import (
+    build_interpretability_profile,
+    build_shap_figures,
+)
 from app.ml.preprocessing.builders import build_preprocessor
 from app.services import figure_service
 
@@ -55,3 +59,51 @@ def test_shap_failure_degrades_gracefully(tmp_path):
     pipe.fit(X, y)
     written = build_shap_figures(pipe, X, "tree", "y", tmp_path, max_display=5)
     assert written == []
+
+
+def _fitted_rf_multiclass_pipeline():
+    rng = np.random.default_rng(2)
+    X = pd.DataFrame(
+        {
+            "x1": rng.normal(size=150),
+            "x2": rng.normal(size=150),
+            "cat": rng.choice(["a", "b", "c"], 150),
+        }
+    )
+    y = rng.choice(["low", "mid", "high"], 150)
+    pre = build_preprocessor(["x1", "x2"], ["cat"], scale_numeric=False)
+    pipe = Pipeline(
+        [("preprocess", pre), ("estimator", RandomForestClassifier(n_estimators=5, random_state=0))]
+    )
+    pipe.fit(X, y)
+    return pipe, X
+
+
+def test_interpretability_profile_linear_exposes_coefficients():
+    pipe, X = _fitted_ridge_pipeline()
+    profile = build_interpretability_profile(pipe, X.head(60), "linear")
+    assert profile["kind"] == "linear"
+    assert profile["coefficients"] is not None
+    assert np.asarray(profile["coefficients"]).shape[-1] == len(profile["feature_names"])
+    assert profile["importance"] is not None
+    assert np.asarray(profile["importance"]).shape[0] == len(profile["feature_names"])
+
+
+def test_interpretability_profile_tree_exposes_shap_arrays():
+    pipe, X = _fitted_rf_multiclass_pipeline()
+    profile = build_interpretability_profile(pipe, X.head(60), "tree")
+    assert profile["kind"] == "tree"
+    assert profile["multiclass"] is True
+    assert profile["has_shap"] is True
+    assert profile["importance"] is not None
+    assert np.asarray(profile["importance"]).shape[0] == len(profile["feature_names"])
+    assert profile["shap_values"] is None or np.asarray(profile["shap_values"]).shape[-1] == len(
+        profile["feature_names"]
+    )
+
+
+def test_interpretability_profile_importance_aligned_to_features():
+    pipe, X = _fitted_rf_multiclass_pipeline()
+    profile = build_interpretability_profile(pipe, X.head(60), "tree")
+    assert np.asarray(profile["importance"]).ndim == 1
+    assert np.asarray(profile["importance"]).shape == (len(profile["feature_names"]),)

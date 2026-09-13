@@ -67,6 +67,7 @@ class TargetArtifacts:
     oof_probabilities: np.ndarray | None = None
     confusion_matrix: list[list[int]] | None = None
     confusion_labels: list[str] | None = None
+    candidate_models: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -348,14 +349,17 @@ def run_training(
         oof_by_model: dict[str, tuple[np.ndarray, np.ndarray | None]] = {}
         direction = METRIC_DIRECTIONS[primary_metric(spec.task)]
 
+        evaluated_by_display: dict[str, tuple[ModelEntry, ModelResult]] = {}
         for entry in entries:
             evaluator = _evaluate_nested_mode if request.cv.mode == "nested" else _evaluate_single_mode
             result, fold_records, oof_pred, oof_proba = evaluator(entry, spec, ctx, request, folds, tracker)
             model_results.append(result)
+            evaluated_by_display[result.model] = (entry, result)
             fold_records_target.extend(fold_records)
             oof_by_model[result.model] = (oof_pred, oof_proba)
 
         ranked = sorted(model_results, key=lambda r: r.primary_mean, reverse=(direction == "max"))
+        rank_by_display = {r.model: position for position, r in enumerate(ranked, start=1)}
         for position, model_result in enumerate(ranked, start=1):
             model_result.rank = position
         for model_result in ranked:
@@ -399,6 +403,30 @@ def run_training(
         )
         final_pipe.fit(ctx.X, spec.y_encoded.to_numpy())
 
+        candidate_models: dict[str, dict] = {}
+        for display_name, (entry, model_result) in evaluated_by_display.items():
+            if entry.key == winning_entry.key:
+                pipe = final_pipe
+                params = final_params
+            else:
+                params = model_result.best_params
+                try:
+                    pipe = _fit_pipeline(
+                        entry, params, request.cv.random_state, ctx.numeric_cols, ctx.categorical_cols
+                    )
+                    pipe.fit(ctx.X, spec.y_encoded.to_numpy())
+                except Exception as exc:
+                    logger.warning("full-data refit failed for %s/%s: %s", spec.name, entry.key, exc)
+                    continue
+            candidate_models[entry.key] = {
+                "key": entry.key,
+                "display_name": entry.display_name,
+                "params": params,
+                "pipeline": pipe,
+                "explainer_kind": entry.explainer,
+                "rank": rank_by_display.get(display_name, 0),
+            }
+
         cm: list[list[int]] | None = None
         cm_labels: list[str] | None = None
         if spec.task == "classification":
@@ -420,6 +448,7 @@ def run_training(
             oof_probabilities=best_proba,
             confusion_matrix=cm,
             confusion_labels=cm_labels,
+            candidate_models=candidate_models,
         )
         tracker.complete(1.0)
 

@@ -58,8 +58,10 @@ Selected model: \textbf{ {{ result.best_model }} }; tuned hyperparameters:
 \centering
 {% for fig in result.figures %}\includegraphics[width=0.48\textwidth]{ {{ fig }} }
 {% endfor %}
-\caption{Out-of-fold diagnostics for target {{ result.target }}
-(selected model).}
+\caption{Out-of-fold diagnostics and decision-tree flowchart for
+target {{ result.target }} (selected model). The tree diagram reads as a
+intuitive \emph{Sí/No} recipe: each box is a question about a real variable
+(e.g.\ \emph{temp\_min $<$ 26.3}) and each leaf is the resulting prediction.}
 \end{figure}
 {% endif %}
 {% if result.shap_note %}

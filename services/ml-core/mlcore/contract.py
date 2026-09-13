@@ -27,7 +27,7 @@ __all__ = [
 
 def persist_training_output(output, work_dir: Path, out_dir: Path) -> None:
     """Write the training contract: base package artifacts + worker inputs."""
-    from automl_shared.artifacts import save_final_models, write_model_manifest
+    from automl_shared.artifacts import save_all_models, save_final_models, write_model_manifest
 
     metrics_dir = out_dir / "metrics"
     data_dir = out_dir / "data"
@@ -43,6 +43,7 @@ def persist_training_output(output, work_dir: Path, out_dir: Path) -> None:
     if output.predictions_frame is not None:
         output.predictions_frame.to_csv(out_dir / PREDICTIONS_RELPATH, index=False)
     save_final_models(output.artifacts, models_dir)
+    save_all_models(output.artifacts, models_dir)
     write_model_manifest(models_dir)
 
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +67,7 @@ def persist_training_output(output, work_dir: Path, out_dir: Path) -> None:
                 "confusion_matrix": artifact.confusion_matrix,
                 "confusion_labels": artifact.confusion_labels,
                 "citation_key": _citation_key_for(artifact),
+                "models": _candidate_meta(artifact),
             }
         )
     meta = {
@@ -88,6 +90,21 @@ def _citation_key_for(artifact) -> str | None:
     except Exception:
         return None
     return getattr(entry, "citation_key", None)
+
+
+def _candidate_meta(artifact) -> list[dict]:
+    candidates: list[dict] = []
+    for key, candidate in (getattr(artifact, "candidate_models", None) or {}).items():
+        candidates.append(
+            {
+                "key": candidate.get("key") or key,
+                "display_name": candidate.get("display_name"),
+                "explainer_kind": candidate.get("explainer_kind"),
+                "rank": candidate.get("rank"),
+                "params": candidate.get("params"),
+            }
+        )
+    return candidates
 
 
 def ensure_persisted(output, work_dir: Path, out_dir: Path) -> None:
