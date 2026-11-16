@@ -200,6 +200,192 @@ def test_duplicate_target_rejected(tiny_mixed_df):
         )
 
 
+def _tiny_regression_with_dates(*, shuffle_seed: int = 7):
+    rng = np.random.default_rng(21)
+    n = 60
+    dates = pd.date_range("2024-01-01", periods=n, freq="D")
+    order = np.random.default_rng(shuffle_seed).permutation(n)
+    x1 = rng.normal(size=n)
+    return pd.DataFrame(
+        {
+            "fecha": dates[order],
+            "x1": np.round(x1, 4),
+            "x2": np.round(rng.normal(size=n), 4),
+            "value": np.round(2 * x1 + rng.normal(0, 0.2, n), 4),
+        }
+    )
+
+
+def _timeseries_request(**overrides):
+    payload = dict(
+        dataset_id="ds_ts",
+        targets=[TargetIn(name="value", task="regression")],
+        models=["linear_regression"],
+        cv=CVConfig(n_folds=3, mode="single", scheme="timeseries", gap=2, random_state=42),
+        hpo=HPOConfig(enabled=False),
+    )
+    payload.update(overrides)
+    return TrainRequest(**payload)
+
+
+def test_timeseries_scheme_orders_rows_chronologically():
+    df = _tiny_regression_with_dates()
+
+    output = run_training(_timeseries_request(), "ds_ts", "ts.csv", df, "job_ts")
+
+    assert output.summary.cv["scheme"] == "timeseries"
+    assert output.summary.cv["gap"] == 2
+    assert output.summary.cv["date_column"] == "fecha"
+
+    frame = output.predictions_frame.copy()
+    frame["fecha"] = pd.to_datetime(frame["fecha"])
+    tested = frame.loc[frame["fold_id"] >= 0].sort_values("fecha")
+    assert tested["fold_id"].is_monotonic_increasing
+    for fold_id in range(1, int(tested["fold_id"].max()) + 1):
+        previous = tested.loc[tested["fold_id"] == fold_id - 1, "fecha"]
+        current = tested.loc[tested["fold_id"] == fold_id, "fecha"]
+        assert previous.max() < current.min()
+
+
+def test_timeseries_keeps_untested_rows_as_nan_predictions():
+    df = _tiny_regression_with_dates()
+    output = run_training(_timeseries_request(), "ds_ts", "ts.csv", df, "job_ts_nan")
+
+    predictions = output.predictions_frame["value_predicted"]
+    assert predictions.isna().any()
+    assert predictions.notna().any()
+
+
+def test_timeseries_without_date_column_warns_and_keeps_row_order():
+    rng = np.random.default_rng(3)
+    n = 40
+    df = pd.DataFrame(
+        {
+            "x1": rng.normal(size=n),
+            "x2": rng.normal(size=n),
+            "value": rng.normal(size=n),
+        }
+    )
+
+    output = run_training(_timeseries_request(), "ds_ts", "no_date.csv", df, "job_ts_no_date")
+
+    assert output.summary.cv["date_column"] is None
+    assert any("row order" in warning for warning in output.summary.warnings)
+
+
+def test_timeseries_detects_string_date_column():
+    df = _tiny_regression_with_dates()
+    df["fecha"] = df["fecha"].dt.strftime("%Y-%m-%d")
+
+    output = run_training(_timeseries_request(), "ds_ts", "ts_string.csv", df, "job_ts_string")
+
+    assert output.summary.cv["date_column"] == "fecha"
+    tested = output.predictions_frame.loc[output.predictions_frame["fold_id"] >= 0]
+    assert len(tested) > 0
+
+
+def test_timeseries_rejects_unknown_explicit_date_column():
+    df = _tiny_regression_with_dates()
+    request = _timeseries_request(
+        cv=CVConfig(n_folds=3, mode="single", scheme="timeseries", date_column="not_a_column")
+    )
+
+    with pytest.raises(ValidationFailedError):
+        run_training(request, "ds_ts", "ts.csv", df, "job_ts_bad_date")
+
+
+def test_timeseries_nested_mode_uses_temporal_inner_folds():
+    df = _tiny_regression_with_dates()
+    request = TrainRequest(
+        dataset_id="ds_ts",
+        targets=[TargetIn(name="value", task="regression")],
+        models=["ridge_regression"],
+        cv=CVConfig(
+            n_folds=2,
+            mode="nested",
+            n_inner_folds=2,
+            scheme="timeseries",
+            gap=1,
+            random_state=5,
+        ),
+        hpo=HPOConfig(enabled=True, n_trials=2, timeout_s=None),
+    )
+
+    output = run_training(request, "ds_ts", "ts.csv", df, "job_ts_nested")
+
+    assert output.summary.cv["scheme"] == "timeseries"
+    assert output.summary.cv["gap"] == 1
+    assert output.per_fold_records["value"]
+    assert all("error" not in record for record in output.per_fold_records["value"])
+
+
+def test_timeseries_classification_handles_untested_rows():
+    df = _tiny_regression_with_dates()
+    df["label"] = np.where(df.index % 2 == 0, "lo", "hi")
+    request = TrainRequest(
+        dataset_id="ds_ts",
+        targets=[TargetIn(name="label", task="classification")],
+        models=["logistic_regression"],
+        cv=CVConfig(n_folds=3, mode="single", scheme="timeseries", gap=2, random_state=42),
+        hpo=HPOConfig(enabled=False),
+    )
+
+    output = run_training(request, "ds_ts", "ts_cls.csv", df, "job_ts_cls")
+
+    frame = output.predictions_frame
+    assert frame["label_predicted"].isna().any()
+    assert frame["label_predicted"].notna().any()
+    cm = output.artifacts["label"].confusion_matrix
+    assert cm is not None
+    tested = int((frame["fold_id"] >= 0).sum())
+    assert sum(map(sum, cm)) == tested
+
+
+def test_timeseries_is_agnostic_to_target_names():
+    rng = np.random.default_rng(9)
+    n = 50
+    dates = pd.date_range("2024-01-01", periods=n, freq="D")
+    order = np.random.default_rng(2).permutation(n)
+    signal = rng.normal(size=n)
+    df = pd.DataFrame(
+        {
+            "fecha": dates[order],
+            "temp_media_c": rng.normal(27, 2, n),
+            "Peso_Recolectado_KG": np.clip(5 + signal + rng.normal(0, 0.5, n), 0, None),
+            "Peso_Perdido_KG": np.clip(1 + rng.normal(0, 0.3, n), 0, None),
+        }
+    )
+    request = TrainRequest(
+        dataset_id="ds_mango_ts",
+        targets=[
+            TargetIn(name="Peso_Recolectado_KG", task="regression"),
+            TargetIn(name="Peso_Perdido_KG", task="regression"),
+        ],
+        models=["linear_regression"],
+        cv=CVConfig(
+            n_folds=3,
+            mode="single",
+            scheme="timeseries",
+            gap=1,
+            date_column="fecha",
+            random_state=42,
+        ),
+        hpo=HPOConfig(enabled=False),
+    )
+
+    output = run_training(request, "ds_mango_ts", "mango.csv", df, "job_mango_ts")
+
+    assert output.summary.cv["scheme"] == "timeseries"
+    assert {target.target for target in output.summary.targets} == {
+        "Peso_Recolectado_KG",
+        "Peso_Perdido_KG",
+    }
+    frame = output.predictions_frame.copy()
+    frame["fecha"] = pd.to_datetime(frame["fecha"])
+    tested = frame.loc[frame["fold_id"] >= 0].sort_values("fecha")
+    assert tested["fold_id"].is_monotonic_increasing
+
+
 def _tiny_with_missing():
     rng = np.random.default_rng(5)
     n = 60

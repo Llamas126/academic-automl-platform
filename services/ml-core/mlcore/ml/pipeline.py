@@ -38,6 +38,48 @@ ProgressCallback = Callable[[str, float], None]
 _PROGRESS_BASE = 0.05
 _PROGRESS_SPAN = 0.94
 
+_DATE_NAME_HINTS = ("fecha", "date", "datetime", "timestamp", "dia", "fec", "periodo")
+
+
+def _looks_like_date_series(series: pd.Series) -> bool:
+    """Return True when a column holds datetimes or parseable date strings."""
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return True
+    if not (pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)):
+        return False
+    sample = series.dropna().head(50)
+    if sample.empty:
+        return False
+    parsed = pd.to_datetime(sample, errors="coerce", format="mixed")
+    return float(parsed.notna().mean()) >= 0.9
+
+
+def _resolve_date_column(df: pd.DataFrame, explicit: str | None) -> str | None:
+    if explicit is not None:
+        if explicit not in df.columns:
+            raise ValidationFailedError(f"date column '{explicit}' not found in dataset")
+        return explicit
+    candidates = [str(column) for column in df.columns if _looks_like_date_series(df[column])]
+    if not candidates:
+        return None
+    hinted = [
+        column for column in candidates if any(hint in column.lower() for hint in _DATE_NAME_HINTS)
+    ]
+    return (hinted or candidates)[0]
+
+
+def _order_chronologically(
+    df: pd.DataFrame, date_column: str | None
+) -> tuple[pd.DataFrame, str | None]:
+    """Sort rows by date without assuming any target or feature name."""
+    column = _resolve_date_column(df, date_column)
+    if column is None:
+        return df, None
+    out = df.copy()
+    out[column] = pd.to_datetime(out[column], errors="coerce", format="mixed")
+    out = out.sort_values(column, kind="stable", na_position="last").reset_index(drop=True)
+    return out, column
+
 
 class ProgressTracker:
     def __init__(self, total_units: float, cb: ProgressCallback) -> None:
@@ -115,11 +157,13 @@ def _evaluate_single_mode(
             seed=seed,
             n_trials=request.hpo.n_trials,
             timeout_s=request.hpo.timeout_s,
+            scheme=request.cv.scheme,
+            gap=request.cv.gap,
         )
     else:
         params = default_params_via_fixed_trial(entry)
 
-    oof_pred = np.empty(n_rows, dtype=float)
+    oof_pred = np.full(n_rows, np.nan, dtype=float)
     oof_proba = (
         np.full((n_rows, len(spec.label_encoder_classes)), np.nan) if spec.task == "classification" else None
     )
@@ -184,7 +228,7 @@ def _evaluate_nested_mode(
     y_true_full = spec.y_encoded.to_numpy()
     n_rows = len(ctx.X)
 
-    oof_pred = np.empty(n_rows, dtype=float)
+    oof_pred = np.full(n_rows, np.nan, dtype=float)
     oof_proba = (
         np.full((n_rows, len(spec.label_encoder_classes)), np.nan) if spec.task == "classification" else None
     )
@@ -211,6 +255,8 @@ def _evaluate_nested_mode(
                     seed=seed + fold_index,
                     n_trials=request.hpo.n_trials,
                     timeout_s=request.hpo.timeout_s,
+                    scheme=request.cv.scheme,
+                    gap=request.cv.gap,
                 )
                 tracker.complete(0.5)
             else:
@@ -304,6 +350,16 @@ def run_training(
     cb: ProgressCallback = progress_cb or (lambda stage, frac: None)
     cb("profiling", 0.01)
 
+    ordering_warning: str | None = None
+    date_column: str | None = None
+    if request.cv.scheme == "timeseries":
+        df_raw, date_column = _order_chronologically(df_raw, request.cv.date_column)
+        if date_column is None:
+            ordering_warning = (
+                "timeseries scheme requested but no datetime column was detected; "
+                "folds follow the dataset row order. Set cv.date_column to make it explicit."
+            )
+
     ctx = resolve_targets(df_raw, request.targets)
     for warning in ctx.warnings:
         logger.info("[job %s] %s", job_id, warning)
@@ -319,6 +375,8 @@ def run_training(
         request.cv.n_folds,
         request.cv.random_state,
         stratify_labels=ctx.stratification_labels,
+        scheme=request.cv.scheme,
+        gap=request.cv.gap,
     )
     cb("folding", _PROGRESS_BASE)
 
@@ -338,6 +396,8 @@ def run_training(
     artifacts: dict[str, TargetArtifacts] = {}
     per_fold_all: dict[str, list[dict]] = {}
     warnings_out = list(ctx.warnings)
+    if ordering_warning:
+        warnings_out.append(ordering_warning)
     fold_assignment = np.empty(len(ctx.X), dtype=int)
     fold_assignment.fill(-1)
     for fold_index, (_tr, te) in enumerate(folds):
@@ -389,6 +449,8 @@ def run_training(
                         seed=request.cv.random_state + 9999,
                         n_trials=request.hpo.n_trials,
                         timeout_s=request.hpo.timeout_s,
+                        scheme=request.cv.scheme,
+                        gap=request.cv.gap,
                     )
                 except TuningFailure as exc:
                     warnings_out.append(str(exc))
@@ -432,7 +494,11 @@ def run_training(
         if spec.task == "classification":
             from mlcore.ml.metrics.calculator import confusion_matrix_aggregated
 
-            cm, cm_labels = confusion_matrix_aggregated(spec.y_encoded.to_numpy(), best_pred)
+            evaluated = np.isfinite(np.asarray(best_pred, dtype=float))
+            cm, cm_labels = confusion_matrix_aggregated(
+                spec.y_encoded.to_numpy()[evaluated],
+                np.asarray(best_pred)[evaluated],
+            )
 
         tracker.emit(f"final-model:{spec.name}")
         artifacts[spec.name] = TargetArtifacts(
@@ -475,6 +541,9 @@ def run_training(
         feature_columns=ctx.feature_names(),
         cv={
             "mode": request.cv.mode,
+            "scheme": request.cv.scheme,
+            "gap": request.cv.gap,
+            "date_column": date_column,
             "n_folds": request.cv.n_folds,
             "n_inner_folds": request.cv.n_inner_folds,
             "random_state": request.cv.random_state,
@@ -524,8 +593,11 @@ def _build_predictions_frame(
             continue
         pred_col = f"{spec.name}_predicted"
         if spec.task == "classification" and artifact.label_classes:
-            codes = artifact.oof_predictions.astype(int)
-            out[pred_col] = [artifact.label_classes[int(c)] for c in codes]
+            predictions = np.asarray(artifact.oof_predictions, dtype=float)
+            out[pred_col] = [
+                artifact.label_classes[int(code)] if np.isfinite(code) else None
+                for code in predictions
+            ]
             if artifact.oof_probabilities is not None:
                 for class_index, class_label in enumerate(artifact.label_classes):
                     safe_label = str(class_label).replace(" ", "_")

@@ -4,7 +4,8 @@ import logging
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold, StratifiedKFold
+from automl_shared.core.exceptions import ValidationFailedError
+from sklearn.model_selection import KFold, StratifiedKFold, TimeSeriesSplit
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,43 @@ def _stratified_folds(
     return [(np.asarray(tr), np.asarray(te)) for tr, te in splitter.split(np.zeros(len(values)), values)]
 
 
+def _timeseries_folds(n_rows: int, n_folds: int, gap: int) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Expanding-window folds that never put future rows in the training set.
+
+    ``gap`` rows are dropped between the end of each training block and the
+    start of its test block, which is the barrier needed by lagged features.
+    """
+    try:
+        splitter = TimeSeriesSplit(n_splits=n_folds, gap=gap)
+        folds = _folds_from_splitter(splitter, n_rows)
+    except ValueError as exc:
+        raise ValidationFailedError(
+            f"timeseries cross-validation needs more rows for {n_folds} folds "
+            f"with gap={gap}: {exc}"
+        ) from exc
+    if not folds or any(len(train) == 0 or len(test) == 0 for train, test in folds):
+        raise ValidationFailedError(
+            f"timeseries cross-validation produced empty folds for {n_rows} rows, "
+            f"{n_folds} folds and gap={gap}"
+        )
+    return folds
+
+
 def make_folds(
     n_rows: int,
     n_folds: int,
     seed: int,
     stratify_labels: np.ndarray | pd.Series | None = None,
+    *,
+    scheme: str = "kfold",
+    gap: int = 0,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
+    if scheme == "timeseries":
+        if stratify_labels is not None:
+            logger.info("timeseries scheme ignores stratification to preserve chronological order")
+        return _timeseries_folds(n_rows, n_folds, max(0, int(gap)))
+    if scheme != "kfold":
+        raise ValidationFailedError(f"unknown cross-validation scheme '{scheme}'")
     if stratify_labels is not None:
         folds = _stratified_folds(stratify_labels, n_folds, seed)
         if folds is not None:

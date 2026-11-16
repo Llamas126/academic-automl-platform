@@ -68,34 +68,68 @@ def roc_curves_figure(
     title: str,
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(5.2, 4.6))
+    y_true = np.asarray(y_true)
+    proba = np.asarray(proba, dtype=float)
+    finite = np.all(np.isfinite(proba), axis=1)
+    y_true, proba = y_true[finite], proba[finite]
+    plotted = False
     n_classes = len(class_names)
-    if n_classes == 2:
-        fpr, tpr, _ = roc_curve(y_true, proba[:, 1])
-        roc_auc = auc(fpr, tpr)
-        ax.plot(fpr, tpr, label=f"{class_names[1]} (AUC = {roc_auc:.3f})")
-    else:
-        for class_index in range(n_classes):
-            binary = (y_true == class_index).astype(int)
-            if binary.sum() == 0 or binary.sum() == len(binary):
-                continue
-            fpr, tpr, _ = roc_curve(binary, proba[:, class_index])
+    if len(y_true) and len(np.unique(y_true)) >= 2:
+        if n_classes == 2:
+            fpr, tpr, _ = roc_curve(y_true, proba[:, 1])
             roc_auc = auc(fpr, tpr)
-            ax.plot(fpr, tpr, label=f"{class_names[class_index]} (AUC = {roc_auc:.3f})")
+            ax.plot(fpr, tpr, label=f"{class_names[1]} (AUC = {roc_auc:.3f})")
+            plotted = True
+        else:
+            for class_index in range(n_classes):
+                binary = (y_true == class_index).astype(int)
+                if binary.sum() == 0 or binary.sum() == len(binary):
+                    continue
+                fpr, tpr, _ = roc_curve(binary, proba[:, class_index])
+                roc_auc = auc(fpr, tpr)
+                ax.plot(fpr, tpr, label=f"{class_names[class_index]} (AUC = {roc_auc:.3f})")
+                plotted = True
     ax.plot([0, 1], [0, 1], linestyle="--", color="gray", linewidth=1.0)
+    if not plotted:
+        ax.text(
+            0.5,
+            0.5,
+            "No evaluated rows",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            color="gray",
+        )
     ax.set_xlabel("False positive rate")
     ax.set_ylabel("True positive rate")
     ax.set_title(title)
-    ax.legend(loc="lower right", frameon=False)
+    if plotted:
+        ax.legend(loc="lower right", frameon=False)
     return fig
 
 
 def predicted_vs_actual_figure(y_true: np.ndarray, y_pred: np.ndarray, target: str) -> plt.Figure:
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    finite = np.isfinite(y_true) & np.isfinite(y_pred)
+    y_true, y_pred = y_true[finite], y_pred[finite]
     fig, ax = plt.subplots(figsize=(5.0, 4.6))
-    ax.scatter(y_true, y_pred, s=14, edgecolors="none")
-    lo = float(min(np.min(y_true), np.min(y_pred)))
-    hi = float(max(np.max(y_true), np.max(y_pred)))
-    margin = (hi - lo) * 0.05
-    ax.plot([lo - margin, hi + margin], [lo - margin, hi + margin], "--", color="gray", linewidth=1.0)
+    if len(y_true):
+        ax.scatter(y_true, y_pred, s=14, edgecolors="none")
+        lo = float(min(np.min(y_true), np.min(y_pred)))
+        hi = float(max(np.max(y_true), np.max(y_pred)))
+        margin = (hi - lo) * 0.05
+        ax.plot([lo - margin, hi + margin], [lo - margin, hi + margin], "--", color="gray", linewidth=1.0)
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No evaluated rows",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            color="gray",
+        )
     ax.set_xlabel(f"Observed {target}")
     ax.set_ylabel(f"Predicted {target}")
     ax.set_title(f"Out-of-fold predictions: {target}")
@@ -103,10 +137,25 @@ def predicted_vs_actual_figure(y_true: np.ndarray, y_pred: np.ndarray, target: s
 
 
 def residuals_figure(y_true: np.ndarray, y_pred: np.ndarray, target: str) -> plt.Figure:
-    residuals = np.asarray(y_true, dtype=float) - np.asarray(y_pred, dtype=float)
-    fitted = np.asarray(y_pred, dtype=float)
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    finite = np.isfinite(y_true) & np.isfinite(y_pred)
+    y_true, y_pred = y_true[finite], y_pred[finite]
+    residuals = y_true - y_pred
+    fitted = y_pred
     fig, ax = plt.subplots(figsize=(5.0, 4.2))
-    ax.scatter(fitted, residuals, s=14, edgecolors="none")
+    if len(fitted):
+        ax.scatter(fitted, residuals, s=14, edgecolors="none")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No evaluated rows",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            color="gray",
+        )
     ax.axhline(0.0, color="gray", linestyle="--", linewidth=1.0)
     ax.set_xlabel("Fitted values")
     ax.set_ylabel("Residuals")

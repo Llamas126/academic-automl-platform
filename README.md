@@ -69,7 +69,7 @@ healthcheck responda en `http://localhost:8000/api/v1/health`.
 
 | Flag | Efecto |
 |---|---|
-| `-Test` / `--test` | Ejecuta antes la suite completa (207 tests) en un contenedor efímero y aborta el despliegue si falla |
+| `-Test` / `--test` | Ejecuta antes la suite completa (223 tests) en un contenedor efímero y aborta el despliegue si falla |
 | `-SkipBuild` / `--skip-build` | Arranca reutilizando imágenes ya construidas |
 | `-Down` / `--down` | Detiene el stack |
 
@@ -203,11 +203,12 @@ precalcúlala en el CSV/XLSX antes de subirlo: se usará como una columna numér
 inferencia exige que envíes exactamente las `feature_columns` del run, incluidas esas columnas
 precalculadas.
 
-> **Advertencia de validación:** la validación cruzada actual usa `KFold` con mezcla aleatoria de
+> **Validación temporal:** por defecto la validación cruzada usa `KFold` con mezcla aleatoria de
 > filas (`services/ml-core/mlcore/ml/validation/kfold.py`). En series de tiempo esto puede producir
 > métricas optimistas por autocorrelación, porque días vecinos caen a la vez en train y test. Para
-> conclusiones temporales, ordena/agrupa tus datos o espera la validación temporal
-> (`TimeSeriesSplit` con `gap`), en desarrollo.
+> conclusiones temporales usa `"cv": {"scheme": "timeseries", "gap": N}`: el pipeline ordena por la
+> columna de fecha (autodetectada o indicada en `date_column`), entrena con ventana expansiva y deja
+> `N` filas de separación entre train y test. Si vas a añadir rezagos de `k` días, usa `gap >= k`.
 
 **EN**
 
@@ -221,11 +222,12 @@ If your study needs `PRECIPITACION_lag_7d`, `PESO_KG_lag_1` or any other lagged 
 it in the CSV/XLSX before uploading; it will be used as just another numeric column. Inference
 requires you to send exactly the run's `feature_columns`, including those precomputed columns.
 
-> **Validation warning:** current cross-validation uses `KFold` with random row shuffling
+> **Temporal validation:** by default cross-validation uses `KFold` with random row shuffling
 > (`services/ml-core/mlcore/ml/validation/kfold.py`). On time series this can yield optimistic
 > metrics due to autocorrelation, because neighboring days land in both train and test. For temporal
-> conclusions, sort/group your data or wait for the temporal validation (`TimeSeriesSplit` with
-> `gap`), currently in development.
+> conclusions use `"cv": {"scheme": "timeseries", "gap": N}`: the pipeline sorts by the date column
+> (auto-detected or set via `date_column`), trains on an expanding window and leaves `N` rows between
+> train and test. If you add `k`-day lags, use `gap >= k`.
 
 ## Tests
 

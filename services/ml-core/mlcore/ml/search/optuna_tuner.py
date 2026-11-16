@@ -79,10 +79,20 @@ def tune_hyperparams(
     seed: int,
     n_trials: int,
     timeout_s: int | None,
+    *,
+    scheme: str = "kfold",
+    gap: int = 0,
 ) -> dict[str, Any]:
     y_arr = np.asarray(y)
     stratify = y_arr if entry.task == "classification" else None
-    folds = make_folds(len(X), n_inner_folds, seed, stratify_labels=stratify)
+    folds = make_folds(
+        len(X),
+        n_inner_folds,
+        seed,
+        stratify_labels=stratify,
+        scheme=scheme,
+        gap=gap,
+    )
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
 

@@ -14,6 +14,12 @@ class CVConfig(BaseModel):
     mode: Literal["nested", "single"] = "nested"
     n_inner_folds: int = Field(3, ge=2, le=10)
     random_state: int = 42
+    #: ``kfold`` shuffles rows; ``timeseries`` keeps chronological order.
+    scheme: Literal["kfold", "timeseries"] = "kfold"
+    #: Rows dropped between train and test in ``timeseries`` (leakage barrier).
+    gap: int = Field(0, ge=0)
+    #: Optional datetime column used to order rows for ``timeseries``.
+    date_column: str | None = None
 
 
 class HPOConfig(BaseModel):
