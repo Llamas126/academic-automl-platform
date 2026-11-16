@@ -69,7 +69,7 @@ healthcheck responda en `http://localhost:8000/api/v1/health`.
 
 | Flag | Efecto |
 |---|---|
-| `-Test` / `--test` | Ejecuta antes la suite completa (223 tests) en un contenedor efímero y aborta el despliegue si falla |
+| `-Test` / `--test` | Ejecuta antes la suite completa (237 tests) en un contenedor efímero y aborta el despliegue si falla |
 | `-SkipBuild` / `--skip-build` | Arranca reutilizando imágenes ya construidas |
 | `-Down` / `--down` | Detiene el stack |
 
@@ -192,42 +192,99 @@ Selección automática por target; métricas primarias: `f1_macro` (clasificaci�
 
 **ES**
 
-El motor tabular no genera memoria temporal para datasets subidos por el usuario: no crea rezagos
-(`lag`), sumas acumuladas ni promedios móviles de la cosecha; cada fila se modela como un evento
-independiente. El dataset gestionado de mango sí incorpora ventanas climáticas de 7/14 días
-(`precipitacion_7d_mm`, `precipitacion_14d_mm`, `temp_max_7d_c`, `humedad_media_7d_pct`,
-`estres_calor_7d`, `dias_sin_lluvia`), pero **no** rezagos de `PESO KG`.
+**Rezagos y ventanas causales.** El bloque `temporal` del request activa ingeniería de
+características temporales estrictamente causal para cualquier CSV/XLSX con columna de fecha y para
+el dataset gestionado de mango. No hay nombres de columnas hardcodeados: las columnas exógenas y los
+targets se pasan por configuración, así que funciona igual con `PESO (PRODUCCIÓN)`,
+`Peso_Recolectado_KG` o `Peso_Perdido_KG`.
 
-Si tu estudio requiere `PRECIPITACION_lag_7d`, `PESO_KG_lag_1` u otra variable rezagada,
-precalcúlala en el CSV/XLSX antes de subirlo: se usará como una columna numérica más. La
-inferencia exige que envíes exactamente las `feature_columns` del run, incluidas esas columnas
-precalculadas.
+- `lags` (por defecto `[1, 3, 7, 14, 30]`) genera `{columna}_lag_{k}` con `shift(k)` sobre las
+  columnas exógenas seleccionadas.
+- `rolling_windows` (por defecto `[7, 14, 30]`) y `rolling_aggs` (`sum`, `mean`, `max`, `min`)
+  generan `{columna}_{agg}_{w}d`. Con `include_current_day: true` la ventana es `<= t`; con
+  `false` se desplaza a `t-w .. t-1`, útil para inferencia operativa antes de tener el clima del día.
+- `target_lags` (p. ej. `[1, 2, 3, 7]`) genera `{target}_lag_{k}` sobre los targets configurados,
+  ordenando previamente por fecha. Es la autocorrelación de cosecha.
+
+**Guardarraíl anti-fuga:** si `target_lags` no está vacío, `cv.scheme` debe ser `"timeseries"` y
+`cv.gap >= max(target_lags)`. En caso contrario el request se rechaza con `ValidationFailedError`.
+Así ningún valor del bloque de validación puede entrar en las features de entrenamiento, y los
+splits internos de `nested`/Optuna respetan el mismo `gap`.
+
+```json
+{
+  "cv": {"scheme": "timeseries", "gap": 7, "date_column": "fecha"},
+  "temporal": {
+    "enabled": true,
+    "exogenous_columns": ["temp_media_c", "precipitacion_mm"],
+    "lags": [1, 3, 7, 14, 30],
+    "rolling_windows": [7, 14, 30],
+    "rolling_aggs": ["sum", "mean", "max", "min"],
+    "include_current_day": true,
+    "target_columns": ["PESO (PRODUCCIÓN)", "Peso_Recolectado_KG"],
+    "target_lags": [1, 2, 3, 7]
+  }
+}
+```
+
+Si `enabled` es `true` y `exogenous_columns` queda vacío, se autoseleccionan las columnas numéricas
+que no son targets ni la fecha. Si `target_columns` queda vacío, se usan los targets del request. La
+inferencia exige enviar exactamente las `feature_columns` del run, incluidas las columnas temporales
+generadas.
 
 > **Validación temporal:** por defecto la validación cruzada usa `KFold` con mezcla aleatoria de
 > filas (`services/ml-core/mlcore/ml/validation/kfold.py`). En series de tiempo esto puede producir
 > métricas optimistas por autocorrelación, porque días vecinos caen a la vez en train y test. Para
 > conclusiones temporales usa `"cv": {"scheme": "timeseries", "gap": N}`: el pipeline ordena por la
 > columna de fecha (autodetectada o indicada en `date_column`), entrena con ventana expansiva y deja
-> `N` filas de separación entre train y test. Si vas a añadir rezagos de `k` días, usa `gap >= k`.
+> `N` filas de separación entre train y test.
 
 **EN**
 
-The tabular engine does not create temporal memory for user-uploaded datasets: it builds no harvest
-lags, cumulative sums or rolling means; every row is modeled as an independent event. The managed
-mango dataset does include 7/14-day climate windows (`precipitacion_7d_mm`, `precipitacion_14d_mm`,
-`temp_max_7d_c`, `humedad_media_7d_pct`, `estres_calor_7d`, `dias_sin_lluvia`), but **no**
-`PESO KG` lags.
+**Causal lags and rolling windows.** The request's `temporal` block enables strictly causal temporal
+feature engineering for any CSV/XLSX with a date column, as well as for the managed mango dataset.
+No column names are hardcoded: exogenous columns and targets are supplied through configuration, so
+it works the same with `PESO (PRODUCCIÓN)`, `Peso_Recolectado_KG` or `Peso_Perdido_KG`.
 
-If your study needs `PRECIPITACION_lag_7d`, `PESO_KG_lag_1` or any other lagged variable, precompute
-it in the CSV/XLSX before uploading; it will be used as just another numeric column. Inference
-requires you to send exactly the run's `feature_columns`, including those precomputed columns.
+- `lags` (default `[1, 3, 7, 14, 30]`) creates `{column}_lag_{k}` with `shift(k)` on the selected
+  exogenous columns.
+- `rolling_windows` (default `[7, 14, 30]`) and `rolling_aggs` (`sum`, `mean`, `max`, `min`) create
+  `{column}_{agg}_{w}d`. With `include_current_day: true` the window is `<= t`; with `false` it is
+  shifted to `t-w .. t-1`, useful for operational inference before the current day's weather exists.
+- `target_lags` (e.g. `[1, 2, 3, 7]`) creates `{target}_lag_{k}` on the configured targets after
+  sorting by date. It captures harvest autocorrelation.
+
+**Anti-leakage guardrail:** when `target_lags` is not empty, `cv.scheme` must be `"timeseries"` and
+`cv.gap >= max(target_lags)`. Otherwise the request is rejected with `ValidationFailedError`. This
+keeps every validation-block value out of the training features, and `nested`/Optuna inner splits
+honor the same `gap`.
+
+```json
+{
+  "cv": {"scheme": "timeseries", "gap": 7, "date_column": "fecha"},
+  "temporal": {
+    "enabled": true,
+    "exogenous_columns": ["temp_media_c", "precipitacion_mm"],
+    "lags": [1, 3, 7, 14, 30],
+    "rolling_windows": [7, 14, 30],
+    "rolling_aggs": ["sum", "mean", "max", "min"],
+    "include_current_day": true,
+    "target_columns": ["PESO (PRODUCCIÓN)", "Peso_Recolectado_KG"],
+    "target_lags": [1, 2, 3, 7]
+  }
+}
+```
+
+When `enabled` is `true` and `exogenous_columns` is empty, numeric non-target columns other than the
+date are auto-selected. When `target_columns` is empty, the request's targets are used. Inference
+requires sending exactly the run's `feature_columns`, including the generated temporal columns.
 
 > **Temporal validation:** by default cross-validation uses `KFold` with random row shuffling
 > (`services/ml-core/mlcore/ml/validation/kfold.py`). On time series this can yield optimistic
 > metrics due to autocorrelation, because neighboring days land in both train and test. For temporal
 > conclusions use `"cv": {"scheme": "timeseries", "gap": N}`: the pipeline sorts by the date column
 > (auto-detected or set via `date_column`), trains on an expanding window and leaves `N` rows between
-> train and test. If you add `k`-day lags, use `gap >= k`.
+> train and test.
 
 ## Tests
 

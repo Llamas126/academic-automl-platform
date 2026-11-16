@@ -42,6 +42,7 @@ class RunSummary(BaseModel):
     n_features: int
     feature_columns: list[str]
     cv: dict[str, Any]
+    temporal: dict[str, Any] = Field(default_factory=dict)
     hpo: dict[str, Any]
     targets: list[TargetResults]
     warnings: list[str] = Field(default_factory=list)

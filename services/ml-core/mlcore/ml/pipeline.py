@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from automl_shared.core.exceptions import ValidationFailedError
 from automl_shared.schemas.results import MetricAggregate, ModelResult, RunSummary, TargetResults
-from automl_shared.schemas.training import TrainRequest
+from automl_shared.schemas.training import TemporalFeatureConfig, TrainRequest
 from sklearn.pipeline import Pipeline
 
 from mlcore.ml.metrics.calculator import (
@@ -23,6 +23,7 @@ from mlcore.ml.metrics.calculator import (
 )
 from mlcore.ml.models.registry import ModelEntry, UnknownModelError, resolve_entries
 from mlcore.ml.preprocessing.builders import build_preprocessor
+from mlcore.ml.preprocessing.temporal import add_temporal_features
 from mlcore.ml.search.optuna_tuner import (
     TuningFailure,
     default_params_via_fixed_trial,
@@ -79,6 +80,61 @@ def _order_chronologically(
     out[column] = pd.to_datetime(out[column], errors="coerce", format="mixed")
     out = out.sort_values(column, kind="stable", na_position="last").reset_index(drop=True)
     return out, column
+
+
+def _validate_target_lags(request: TrainRequest) -> None:
+    """Enforce the anti-leakage barrier for harvest autocorrelation features."""
+    lags = request.temporal.target_lags
+    if not lags:
+        return
+    if request.cv.scheme != "timeseries":
+        raise ValidationFailedError(
+            "temporal.target_lags requires cv.scheme='timeseries': random folds would mix "
+            f"future rows into training (got scheme='{request.cv.scheme}')"
+        )
+    max_lag = max(lags)
+    if request.cv.gap < max_lag:
+        raise ValidationFailedError(
+            f"temporal.target_lags up to {max_lag} days require cv.gap >= {max_lag} so the "
+            f"validation block cannot leak into training; got gap={request.cv.gap}"
+        )
+
+
+def _resolve_temporal_config(
+    df: pd.DataFrame, request: TrainRequest, date_column: str | None
+) -> TemporalFeatureConfig | None:
+    """Fill in target/exogenous columns and the resolved date column."""
+    config = request.temporal
+    active = config.enabled or bool(config.target_lags)
+    if not active:
+        return None
+
+    target_columns = config.target_columns or [target.name for target in request.targets]
+    missing_targets = [column for column in target_columns if column not in df.columns]
+    if missing_targets:
+        raise ValidationFailedError(f"temporal target columns not found: {missing_targets}")
+
+    exogenous = list(config.exogenous_columns)
+    if config.enabled and not exogenous:
+        excluded = set(target_columns)
+        if date_column is not None:
+            excluded.add(date_column)
+        exogenous = [
+            str(column)
+            for column in df.columns
+            if column not in excluded and pd.api.types.is_numeric_dtype(df[column])
+        ]
+    missing_exogenous = [column for column in exogenous if column not in df.columns]
+    if missing_exogenous:
+        raise ValidationFailedError(f"temporal exogenous columns not found: {missing_exogenous}")
+
+    return config.model_copy(
+        update={
+            "target_columns": target_columns,
+            "exogenous_columns": exogenous,
+            "date_column": date_column,
+        }
+    )
 
 
 class ProgressTracker:
@@ -350,15 +406,43 @@ def run_training(
     cb: ProgressCallback = progress_cb or (lambda stage, frac: None)
     cb("profiling", 0.01)
 
+    _validate_target_lags(request)
+
+    temporal_requested = request.temporal.enabled or bool(request.temporal.target_lags)
+    if (
+        request.temporal.date_column
+        and request.cv.date_column
+        and request.temporal.date_column != request.cv.date_column
+    ):
+        raise ValidationFailedError(
+            "temporal.date_column and cv.date_column disagree "
+            f"('{request.temporal.date_column}' vs '{request.cv.date_column}')"
+        )
+    explicit_date = request.temporal.date_column or request.cv.date_column
+
     ordering_warning: str | None = None
     date_column: str | None = None
-    if request.cv.scheme == "timeseries":
-        df_raw, date_column = _order_chronologically(df_raw, request.cv.date_column)
-        if date_column is None:
+    if request.cv.scheme == "timeseries" or temporal_requested:
+        df_raw, date_column = _order_chronologically(df_raw, explicit_date)
+        if date_column is None and request.cv.scheme == "timeseries":
             ordering_warning = (
                 "timeseries scheme requested but no datetime column was detected; "
                 "folds follow the dataset row order. Set cv.date_column to make it explicit."
             )
+    if temporal_requested and date_column is None:
+        raise ValidationFailedError(
+            "temporal features require a date column to order rows before computing causal "
+            "lags/rolling windows; set temporal.date_column or cv.date_column"
+        )
+
+    temporal_config = _resolve_temporal_config(df_raw, request, date_column)
+    generated_temporal_columns: list[str] = []
+    if temporal_config is not None:
+        existing_columns = set(df_raw.columns)
+        df_raw = add_temporal_features(df_raw, temporal_config)
+        generated_temporal_columns = [
+            column for column in df_raw.columns if column not in existing_columns
+        ]
 
     ctx = resolve_targets(df_raw, request.targets)
     for warning in ctx.warnings:
@@ -398,6 +482,12 @@ def run_training(
     warnings_out = list(ctx.warnings)
     if ordering_warning:
         warnings_out.append(ordering_warning)
+    if temporal_config is not None and request.cv.scheme != "timeseries":
+        warnings_out.append(
+            "temporal features are enabled with cv.scheme='kfold'; random folds can mix "
+            "neighboring days and overstate performance. Use cv.scheme='timeseries' for "
+            "temporal data."
+        )
     fold_assignment = np.empty(len(ctx.X), dtype=int)
     fold_assignment.fill(-1)
     for fold_index, (_tr, te) in enumerate(folds):
@@ -548,6 +638,18 @@ def run_training(
             "n_inner_folds": request.cv.n_inner_folds,
             "random_state": request.cv.random_state,
             "fold_sizes": fold_report(folds),
+        },
+        temporal={
+            "enabled": temporal_config is not None,
+            "date_column": date_column,
+            "exogenous_columns": temporal_config.exogenous_columns if temporal_config else [],
+            "target_columns": temporal_config.target_columns if temporal_config else [],
+            "lags": temporal_config.lags if temporal_config else [],
+            "rolling_windows": temporal_config.rolling_windows if temporal_config else [],
+            "rolling_aggs": temporal_config.rolling_aggs if temporal_config else [],
+            "include_current_day": temporal_config.include_current_day if temporal_config else True,
+            "target_lags": temporal_config.target_lags if temporal_config else [],
+            "generated_columns": generated_temporal_columns,
         },
         hpo={
             "enabled": request.hpo.enabled,

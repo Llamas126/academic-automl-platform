@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from automl_shared.core.exceptions import ValidationFailedError
+from automl_shared.temporal import rolling_feature
 
 GDD_BASE_C = 10.0
 RAIN_THRESHOLD_MM = 1.0
@@ -74,17 +75,19 @@ def add_climate_features(frame: pd.DataFrame) -> pd.DataFrame:
     out["grados_dia_crecimiento"] = (out["temp_media_c"] - GDD_BASE_C).clip(lower=0.0)
 
     rain = out["precipitacion_mm"]
-    out["precipitacion_7d_mm"] = rain.rolling(WINDOW_SHORT, min_periods=1).sum()
-    out["precipitacion_14d_mm"] = rain.rolling(WINDOW_LONG, min_periods=1).sum()
-    out["temp_max_7d_c"] = out["temp_max_c"].rolling(WINDOW_SHORT, min_periods=1).max()
-    out["humedad_media_7d_pct"] = out["humedad_relativa_pct"].rolling(WINDOW_SHORT, min_periods=1).mean()
+    out["precipitacion_7d_mm"] = rolling_feature(rain, WINDOW_SHORT, "sum")
+    out["precipitacion_14d_mm"] = rolling_feature(rain, WINDOW_LONG, "sum")
+    out["temp_max_7d_c"] = rolling_feature(out["temp_max_c"], WINDOW_SHORT, "max")
+    out["humedad_media_7d_pct"] = rolling_feature(
+        out["humedad_relativa_pct"], WINDOW_SHORT, "mean"
+    )
 
     is_dry = (rain < RAIN_THRESHOLD_MM).fillna(False)
     dry_groups = (~is_dry).cumsum()
     out["dias_sin_lluvia"] = is_dry.groupby(dry_groups).cumsum().astype(float)
 
     is_hot = (out["temp_max_c"] >= HEAT_STRESS_C).astype(float).where(out["temp_max_c"].notna())
-    out["estres_calor_7d"] = is_hot.rolling(WINDOW_SHORT, min_periods=1).sum()
+    out["estres_calor_7d"] = rolling_feature(is_hot, WINDOW_SHORT, "sum")
 
     return out
 
