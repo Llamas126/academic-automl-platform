@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -50,6 +51,27 @@ class LocalStorage:
     def profile_path(self, dataset_id: str) -> Path:
         return self.dataset_dir(dataset_id) / "profile.json"
 
+    def managed_marker_path(self, dataset_id: str) -> Path:
+        return self.dataset_dir(dataset_id) / ".managed"
+
+    def is_managed(self, dataset_id: str) -> bool:
+        return self.managed_marker_path(dataset_id).exists()
+
+    def managed_manifest_path(self, dataset_id: str) -> Path:
+        return self.dataset_dir(dataset_id) / "dataset.json"
+
+    def managed_versions_dir(self, dataset_id: str) -> Path:
+        return self.dataset_dir(dataset_id) / "versions"
+
+    def managed_sources_dir(self, dataset_id: str) -> Path:
+        return self.dataset_dir(dataset_id) / "sources"
+
+    def managed_registry_path(self, dataset_id: str) -> Path:
+        return self.managed_sources_dir(dataset_id) / "registry.json"
+
+    def managed_cache_dir(self, dataset_id: str) -> Path:
+        return self.dataset_dir(dataset_id) / ".cache"
+
     def save_upload(self, filename: str, content: bytes) -> tuple[str, Path]:
         dataset_id = new_id("ds")
         path = self.dataset_file(dataset_id, sanitize_filename(filename))
@@ -57,15 +79,28 @@ class LocalStorage:
         path.write_bytes(content)
         return dataset_id, path
 
-    def save_json(self, path: Path, payload: dict) -> None:
-        import json
+    def write_bytes_atomic(self, path: Path, payload: bytes) -> None:
+        """Replace ``path`` atomically via a sibling temp file."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            with temp.open("wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp, path)
+        finally:
+            temp.unlink(missing_ok=True)
 
+    def write_json_atomic(self, path: Path, payload: dict) -> None:
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
+        self.write_bytes_atomic(path, text.encode("utf-8"))
+
+    def save_json(self, path: Path, payload: dict) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def load_json(self, path: Path) -> dict:
-        import json
-
         if not path.exists():
             from automl_shared.core.exceptions import NotFoundError
 

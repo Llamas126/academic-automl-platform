@@ -18,6 +18,7 @@ async def lifespan(_app: FastAPI):
 
 def create_app() -> FastAPI:
     from ingestion.api.v1.datasets import router as datasets_router
+    from ingestion.api.v1.mango import router as mango_router
 
     settings = get_settings()
     configure_logging()
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok", "service": "ingestion"}
 
+    app.include_router(mango_router, prefix=settings.api_v1_prefix)
     app.include_router(datasets_router, prefix=settings.api_v1_prefix)
     return app
 

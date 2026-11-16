@@ -41,6 +41,12 @@ Microservicios desacoplados que comparten un paquete común (`packages/shared/au
 | POST | `/api/v1/predict/{job_id}` | Inferencia con los modelos de un run terminado: JSON `{"records":[...]}` o upload CSV/XLSX; query opcional `?targets=t1,t2` |
 | GET | `/api/v1/status/{job_id}` | Estado/estadio/progreso |
 | GET | `/api/v1/download/{job_id}` | Descarga ZIP del run |
+| PUT | `/api/v1/datasets/mango/sources/nasa` | Registra la fuente climática NASA POWER (multipart o ruta) (201) |
+| PUT | `/api/v1/datasets/mango/sources/local` | Registra los registros de cosecha/pérdida del productor (201) |
+| POST | `/api/v1/datasets/mango/sync` | Construye/publica el dataset canónico de mango (idempotente; admite `force`, `dry_run`, `refresh_nasa`) |
+| GET | `/api/v1/datasets/mango/manifest` | Manifiesto publicado: cobertura, targets, hashes y warnings |
+| GET | `/api/v1/datasets/mango/sources` | Fuentes configuradas, ganadoras y candidatas detectadas |
+| GET | `/api/v1/datasets/mango/state` | Resumen de la última sincronización |
 
 ## Arranque rápido (Docker)
 
@@ -63,7 +69,7 @@ healthcheck responda en `http://localhost:8000/api/v1/health`.
 
 | Flag | Efecto |
 |---|---|
-| `-Test` / `--test` | Ejecuta antes la suite completa (112 tests) en un contenedor efímero y aborta el despliegue si falla |
+| `-Test` / `--test` | Ejecuta antes la suite completa (207 tests) en un contenedor efímero y aborta el despliegue si falla |
 | `-SkipBuild` / `--skip-build` | Arranca reutilizando imágenes ya construidas |
 | `-Down` / `--down` | Detiene el stack |
 
@@ -181,6 +187,45 @@ Controles defensivos siempre activos:
 
 sklearn core: Linear/Ridge/Lasso, RandomForest, GradientBoosting · XGBoost · LightGBM.
 Selección automática por target; métricas primarias: `f1_macro` (clasificación), `rmse` (regresión).
+
+## Datos temporales y motor tabular / Temporal data and the tabular engine
+
+**ES**
+
+El motor tabular no genera memoria temporal para datasets subidos por el usuario: no crea rezagos
+(`lag`), sumas acumuladas ni promedios móviles de la cosecha; cada fila se modela como un evento
+independiente. El dataset gestionado de mango sí incorpora ventanas climáticas de 7/14 días
+(`precipitacion_7d_mm`, `precipitacion_14d_mm`, `temp_max_7d_c`, `humedad_media_7d_pct`,
+`estres_calor_7d`, `dias_sin_lluvia`), pero **no** rezagos de `PESO KG`.
+
+Si tu estudio requiere `PRECIPITACION_lag_7d`, `PESO_KG_lag_1` u otra variable rezagada,
+precalcúlala en el CSV/XLSX antes de subirlo: se usará como una columna numérica más. La
+inferencia exige que envíes exactamente las `feature_columns` del run, incluidas esas columnas
+precalculadas.
+
+> **Advertencia de validación:** la validación cruzada actual usa `KFold` con mezcla aleatoria de
+> filas (`services/ml-core/mlcore/ml/validation/kfold.py`). En series de tiempo esto puede producir
+> métricas optimistas por autocorrelación, porque días vecinos caen a la vez en train y test. Para
+> conclusiones temporales, ordena/agrupa tus datos o espera la validación temporal
+> (`TimeSeriesSplit` con `gap`), en desarrollo.
+
+**EN**
+
+The tabular engine does not create temporal memory for user-uploaded datasets: it builds no harvest
+lags, cumulative sums or rolling means; every row is modeled as an independent event. The managed
+mango dataset does include 7/14-day climate windows (`precipitacion_7d_mm`, `precipitacion_14d_mm`,
+`temp_max_7d_c`, `humedad_media_7d_pct`, `estres_calor_7d`, `dias_sin_lluvia`), but **no**
+`PESO KG` lags.
+
+If your study needs `PRECIPITACION_lag_7d`, `PESO_KG_lag_1` or any other lagged variable, precompute
+it in the CSV/XLSX before uploading; it will be used as just another numeric column. Inference
+requires you to send exactly the run's `feature_columns`, including those precomputed columns.
+
+> **Validation warning:** current cross-validation uses `KFold` with random row shuffling
+> (`services/ml-core/mlcore/ml/validation/kfold.py`). On time series this can yield optimistic
+> metrics due to autocorrelation, because neighboring days land in both train and test. For temporal
+> conclusions, sort/group your data or wait for the temporal validation (`TimeSeriesSplit` with
+> `gap`), currently in development.
 
 ## Tests
 

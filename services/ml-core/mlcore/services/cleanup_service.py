@@ -48,6 +48,10 @@ def _scan(
     for entry in sorted(root.iterdir()):
         if not entry.is_dir():
             continue
+        if (entry / ".managed").exists():
+            # Managed datasets (mango) own their lifecycle; never TTL-delete them.
+            skipped.append(entry.name)
+            continue
         if protected and entry.name in protected:
             skipped.append(entry.name)
             continue

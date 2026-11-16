@@ -38,3 +38,9 @@ class DatasetProfile(BaseModel):
     n_cols: int
     columns: list[ColumnProfile]
     target_suggestions: list[TargetSuggestion]
+    managed: bool = False
+    domain: str | None = None
+    available_targets: list[str] = Field(default_factory=list)
+    unavailable_targets: dict[str, str] = Field(default_factory=dict)
+    canonical_sha256: str | None = None
+    manifest_version: int | None = None

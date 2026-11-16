@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 from automl_shared.core.config import get_settings
 from automl_shared.core.exceptions import (
+    ConflictError,
     NotFoundError,
     PayloadTooLargeError,
     UnsupportedFileError,
@@ -32,7 +33,7 @@ __all__ = [
 ]
 
 
-async def read_upload_capped(upload, max_bytes: int) -> bytes:
+async def read_upload_capped(upload, max_bytes: int, *, limit_mb: int | None = None) -> bytes:
     """Read an UploadFile in chunks, aborting as soon as the cap is exceeded.
 
     Prevents full-in-memory buffering of oversized bodies before the size
@@ -43,7 +44,8 @@ async def read_upload_capped(upload, max_bytes: int) -> bytes:
         buffer.extend(chunk)
         if len(buffer) > max_bytes:
             settings = get_settings()
-            raise PayloadTooLargeError(f"file exceeds upload limit of {settings.max_upload_mb} MB")
+            limit = limit_mb if limit_mb is not None else settings.max_upload_mb
+            raise PayloadTooLargeError(f"file exceeds upload limit of {limit} MB")
     return bytes(buffer)
 
 
@@ -111,4 +113,8 @@ def get_profile(dataset_id: str) -> DatasetProfile:
 def delete_dataset(dataset_id: str) -> None:
     if not storage.profile_path(dataset_id).exists():
         raise NotFoundError(f"dataset '{dataset_id}' not found")
+    if storage.is_managed(dataset_id):
+        raise ConflictError(
+            "managed dataset cannot be deleted via this endpoint; remove it manually from storage"
+        )
     storage.delete_dataset(dataset_id)

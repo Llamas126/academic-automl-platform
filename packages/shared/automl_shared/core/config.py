@@ -1,3 +1,4 @@
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -52,6 +53,27 @@ class Settings(BaseSettings):
     artifact_integrity: Literal["off", "if_present", "strict"] = "if_present"
     artifact_signing_key: str = ""
 
+    # Mango managed dataset (F2). Unprefixed env names: MANGO_SOURCE_DIR, ...
+    mango_dataset_id: str = "ds_mango_malambo"
+    mango_source_dir: Path = Path("data/mango")
+    mango_enable_nasa_api: bool = False
+    mango_cache_ttl_hours: int = 24
+    mango_date_start: date = date(2018, 3, 1)
+    mango_date_end: date = date(2026, 8, 30)
+    mango_latitude: float = 10.85
+    mango_longitude: float = -74.78
+    mango_min_positive_days: int = 30
+    mango_strict_coverage: bool = False
+    mango_allow_edge_fill: bool = False
+    mango_include_uncovered_rows: bool = False
+    mango_max_source_mb: int = 100
+    mango_source_scan_limit: int = 500
+    mango_sync_lock_timeout_seconds: int = 600
+    mango_sync_timeout_seconds: int = 180
+    mango_nasa_retries: int = 2
+    mango_nasa_timeout_seconds: float = 20.0
+    mango_keep_versions: int = 10
+
     @property
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"
@@ -63,6 +85,7 @@ class Settings(BaseSettings):
     def ensure_dirs(self) -> None:
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
+        self.mango_source_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
