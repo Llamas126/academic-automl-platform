@@ -17,6 +17,7 @@ from automl_shared.schemas.results import RunSummary
 
 META_NAME = "training_meta.json"
 BACKGROUND_NAME = "background.csv"
+TEMPORAL_CONTEXT_NAME = "temporal_context.json"
 SUMMARY_RELPATH = Path("metrics") / "results_summary.json"
 PER_FOLD_RELPATH = Path("metrics") / "per_fold.csv"
 PREDICTIONS_RELPATH = Path("data") / "dataset_with_predictions.csv"

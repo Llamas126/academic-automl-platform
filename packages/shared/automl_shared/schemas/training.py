@@ -49,6 +49,9 @@ class TemporalFeatureConfig(BaseModel):
     include_current_day: bool = True
     #: Harvest autocorrelation lags. Requires a temporal CV with a sufficient gap.
     target_lags: list[int] = Field(default_factory=list)
+    #: Drop rows where every configured target is zero *after* computing temporal features.
+    #: Defaults to ``False`` for backward compatibility; useful for zero-inflated harvest data.
+    drop_zero_targets: bool = False
 
     @field_validator("lags", "rolling_windows", "target_lags")
     @classmethod

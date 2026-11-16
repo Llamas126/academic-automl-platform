@@ -13,6 +13,7 @@ from automl_shared.contract import (
     PER_FOLD_RELPATH,
     PREDICTIONS_RELPATH,
     SUMMARY_RELPATH,
+    TEMPORAL_CONTEXT_NAME,
     contract_complete,
     eval_npz_name,
 )
@@ -45,6 +46,11 @@ def persist_training_output(output, work_dir: Path, out_dir: Path) -> None:
     save_final_models(output.artifacts, models_dir)
     save_all_models(output.artifacts, models_dir)
     write_model_manifest(models_dir)
+    if output.temporal_context is not None:
+        (models_dir / TEMPORAL_CONTEXT_NAME).write_text(
+            json.dumps(output.temporal_context, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
 
     work_dir.mkdir(parents=True, exist_ok=True)
     targets_meta: list[dict[str, Any]] = []

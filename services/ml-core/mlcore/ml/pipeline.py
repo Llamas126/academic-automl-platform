@@ -23,7 +23,7 @@ from mlcore.ml.metrics.calculator import (
 )
 from mlcore.ml.models.registry import ModelEntry, UnknownModelError, resolve_entries
 from mlcore.ml.preprocessing.builders import build_preprocessor
-from mlcore.ml.preprocessing.temporal import add_temporal_features
+from mlcore.ml.preprocessing.temporal import add_temporal_features, max_lookback
 from mlcore.ml.search.optuna_tuner import (
     TuningFailure,
     default_params_via_fixed_trial,
@@ -137,6 +137,26 @@ def _resolve_temporal_config(
     )
 
 
+def _drop_zero_target_rows(
+    df: pd.DataFrame, target_columns: list[str]
+) -> tuple[pd.DataFrame, int]:
+    """Drop days where every configured target is zero.
+
+    Call this *after* temporal features have been computed: lags and rolling
+    windows must see the complete daily series so continuity is preserved.
+    Missing target values are left for ``resolve_targets`` to handle.
+    """
+    columns = [column for column in target_columns if column in df.columns]
+    if not columns:
+        return df, 0
+    numeric = df[columns].apply(pd.to_numeric, errors="coerce")
+    zero_mask = (numeric == 0).all(axis=1)
+    dropped = int(zero_mask.sum())
+    if dropped:
+        df = df.loc[~zero_mask].reset_index(drop=True)
+    return df, dropped
+
+
 class ProgressTracker:
     def __init__(self, total_units: float, cb: ProgressCallback) -> None:
         self.total = max(total_units, 1e-9)
@@ -176,6 +196,7 @@ class PipelineOutput:
     fold_assignments: np.ndarray | None = None
     background_frame: pd.DataFrame | None = None
     per_fold_records: dict[str, list[dict]] = field(default_factory=dict)
+    temporal_context: dict | None = None
 
 
 def _fit_pipeline(
@@ -436,6 +457,13 @@ def run_training(
         )
 
     temporal_config = _resolve_temporal_config(df_raw, request, date_column)
+    lookback = max_lookback(temporal_config) if temporal_config is not None else 0
+    history_frame: pd.DataFrame | None = None
+    if lookback > 0:
+        # Keep the raw rows *before* feature generation: inference replays the
+        # exact same causal transforms on history + incoming raw rows.
+        history_frame = df_raw.tail(lookback).copy()
+
     generated_temporal_columns: list[str] = []
     if temporal_config is not None:
         existing_columns = set(df_raw.columns)
@@ -443,6 +471,15 @@ def run_training(
         generated_temporal_columns = [
             column for column in df_raw.columns if column not in existing_columns
         ]
+
+    zero_target_columns = (
+        temporal_config.target_columns
+        if temporal_config is not None
+        else [target.name for target in request.targets]
+    )
+    dropped_zero_rows = 0
+    if request.temporal.drop_zero_targets:
+        df_raw, dropped_zero_rows = _drop_zero_target_rows(df_raw, zero_target_columns)
 
     ctx = resolve_targets(df_raw, request.targets)
     for warning in ctx.warnings:
@@ -487,6 +524,11 @@ def run_training(
             "temporal features are enabled with cv.scheme='kfold'; random folds can mix "
             "neighboring days and overstate performance. Use cv.scheme='timeseries' for "
             "temporal data."
+        )
+    if dropped_zero_rows:
+        warnings_out.append(
+            f"{dropped_zero_rows} rows with all-zero targets dropped after temporal feature "
+            "generation; lags and rolling windows keep the full daily series."
         )
     fold_assignment = np.empty(len(ctx.X), dtype=int)
     fold_assignment.fill(-1)
@@ -649,6 +691,10 @@ def run_training(
             "rolling_aggs": temporal_config.rolling_aggs if temporal_config else [],
             "include_current_day": temporal_config.include_current_day if temporal_config else True,
             "target_lags": temporal_config.target_lags if temporal_config else [],
+            "drop_zero_targets": request.temporal.drop_zero_targets,
+            "dropped_zero_rows": dropped_zero_rows,
+            "max_lookback": lookback,
+            "history_rows": len(history_frame) if history_frame is not None else 0,
             "generated_columns": generated_temporal_columns,
         },
         hpo={
@@ -670,6 +716,17 @@ def run_training(
         background_frame = ctx.X.iloc[background_indices]
     else:
         background_frame = ctx.X
+    temporal_context = None
+    if temporal_config is not None:
+        temporal_context = {
+            "schema_version": 1,
+            "config": temporal_config.model_dump(mode="json"),
+            "date_column": date_column,
+            "max_lookback": lookback,
+            "history": (
+                history_frame.to_dict(orient="records") if history_frame is not None else []
+            ),
+        }
     return PipelineOutput(
         summary=summary,
         artifacts=artifacts,
@@ -677,6 +734,7 @@ def run_training(
         fold_assignments=fold_assignment,
         background_frame=background_frame.copy(),
         per_fold_records=per_fold_all,
+        temporal_context=temporal_context,
     )
 
 

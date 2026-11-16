@@ -38,7 +38,7 @@ Microservicios desacoplados que comparten un paquete común (`packages/shared/au
 | GET | `/api/v1/datasets/{dataset_id}` | Metadatos del dataset |
 | DELETE | `/api/v1/datasets/{dataset_id}` | Borra dataset |
 | POST | `/api/v1/train` | Crea job de entrenamiento (202) |
-| POST | `/api/v1/predict/{job_id}` | Inferencia con los modelos de un run terminado: JSON `{"records":[...]}` o upload CSV/XLSX; query opcional `?targets=t1,t2` |
+| POST | `/api/v1/predict/{job_id}` | Inferencia con los modelos de un run terminado: JSON `{"records":[...]}` o upload CSV/XLSX; features temporales reconstruidas desde crudas + historial; query opcional `?targets=t1,t2&horizon=3&mode=recursive` |
 | GET | `/api/v1/status/{job_id}` | Estado/estadio/progreso |
 | GET | `/api/v1/download/{job_id}` | Descarga ZIP del run |
 | PUT | `/api/v1/datasets/mango/sources/nasa` | Registra la fuente climática NASA POWER (multipart o ruta) (201) |
@@ -69,7 +69,7 @@ healthcheck responda en `http://localhost:8000/api/v1/health`.
 
 | Flag | Efecto |
 |---|---|
-| `-Test` / `--test` | Ejecuta antes la suite completa (237 tests) en un contenedor efímero y aborta el despliegue si falla |
+| `-Test` / `--test` | Ejecuta antes la suite completa (241 tests) en un contenedor efímero y aborta el despliegue si falla |
 | `-SkipBuild` / `--skip-build` | Arranca reutilizando imágenes ya construidas |
 | `-Down` / `--down` | Detiene el stack |
 
@@ -132,12 +132,19 @@ curl -X POST http://localhost:8000/api/v1/train -H "Content-Type: application/js
 ```
 report/report.pdf|report.tex     latex/tables/table_<target>.tex
 bib/references.bib               figures/<target>/*.png|eps (+ shap/)
-models/<target>_best_model.joblib
+models/<target>_best_model.joblib  models/temporal_context.json (runs temporales)
 metrics/results_summary.json     metrics/per_fold.csv
 data/dataset_with_predictions.csv  MANIFEST.txt
 ```
 
 ## Inferencia
+
+La respuesta va alineada por fila (`predictions[i].row_index`), con etiquetas decodificadas y
+bloques `<target>_probabilities` por clase en clasificación. Columnas extra se ignoran con un
+warning. Hay dos formas de enviar datos:
+
+**Opción A — features precalculadas (retrocompatible).** Si el payload ya trae todas las
+`feature_columns` del run, incluidas las columnas `*_lag_*` y `*_rolling_*`, se usan tal cual.
 
 ```bash
 # Registros JSON (tiempo real o lotes pequeños)
@@ -150,9 +157,35 @@ curl -X POST "http://localhost:8000/api/v1/predict/<job_id>?targets=grade" \
   -F "file=@nuevos_datos.csv"
 ```
 
-La respuesta va alineada por fila (`predictions[i].row_index`), con etiquetas decodificadas y
-bloques `<target>_probabilities` por clase en clasificación. Columnas extra se ignoran con un
-warning; columnas faltantes devuelven 422.
+**Opción B — variables crudas + historial.** Para runs con `temporal`, envía solo las variables
+crudas del día (por ejemplo `fecha` y clima). El job persiste el `max_lookback` y las últimas filas
+del entrenamiento; la API concatena ese contexto, ordena por fecha y aplica exactamente las mismas
+transformaciones causales de `automl_shared.temporal`. Puedes reemplazar el contexto guardado con
+`history` (lista de filas crudas anteriores).
+
+```bash
+# 3 días futuros usando el historial guardado del entrenamiento
+curl -X POST "http://localhost:8000/api/v1/predict/<job_id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      {"fecha": "2026-01-10", "temp_media_c": 27.1, "precipitacion_mm": 0.0},
+      {"fecha": "2026-01-11", "temp_media_c": 26.4, "precipitacion_mm": 4.2},
+      {"fecha": "2026-01-12", "temp_media_c": 28.0, "precipitacion_mm": 1.1}
+    ],
+    "horizon": 3,
+    "mode": "recursive"
+  }'
+```
+
+Con `target_lags` activo y varios días sin targets reales intermedios, `mode: "recursive"` alimenta
+la predicción de `t` como `target_lag_1` de `t+1`. `mode: "auto"` (por defecto) activa esa recursión
+cuando detecta targets intermedios ausentes; `mode: "one-step-ahead"` solo usa valores reales
+disponibles y deja NaN los rezagos que no se pueden reconstruir. Si el payload ya trae todas las
+features, la recursión no se aplica (se respeta lo precalculado).
+
+Para subir un archivo con historial explícito usa los campos multipart `history` (JSON) y
+`horizon`/`mode` (query o formulario).
 
 ## Mantenimiento (TTL cleanup)
 
@@ -205,6 +238,9 @@ targets se pasan por configuración, así que funciona igual con `PESO (PRODUCCI
   `false` se desplaza a `t-w .. t-1`, útil para inferencia operativa antes de tener el clima del día.
 - `target_lags` (p. ej. `[1, 2, 3, 7]`) genera `{target}_lag_{k}` sobre los targets configurados,
   ordenando previamente por fecha. Es la autocorrelación de cosecha.
+- `drop_zero_targets` (por defecto `false`) elimina las filas donde **todos** los targets configurados
+  valen `0`, después de calcular lags y ventanas sobre la serie diaria completa. Así se evita el
+  sesgo de días sin corte sin romper la continuidad temporal.
 
 **Guardarraíl anti-fuga:** si `target_lags` no está vacío, `cv.scheme` debe ser `"timeseries"` y
 `cv.gap >= max(target_lags)`. En caso contrario el request se rechaza con `ValidationFailedError`.
@@ -228,9 +264,11 @@ splits internos de `nested`/Optuna respetan el mismo `gap`.
 ```
 
 Si `enabled` es `true` y `exogenous_columns` queda vacío, se autoseleccionan las columnas numéricas
-que no son targets ni la fecha. Si `target_columns` queda vacío, se usan los targets del request. La
-inferencia exige enviar exactamente las `feature_columns` del run, incluidas las columnas temporales
-generadas.
+que no son targets ni la fecha. Si `target_columns` queda vacío, se usan los targets del request. El
+run persiste la configuración resuelta, `max_lookback = max(lags + rolling_windows + target_lags)` y
+las últimas `max_lookback` filas crudas del entrenamiento. La inferencia puede recibir las
+`feature_columns` ya calculadas (Opción A) o solo las variables crudas del día (Opción B): en este
+segundo caso reconstruye las features con el historial guardado o con `history` explícito.
 
 > **Validación temporal:** por defecto la validación cruzada usa `KFold` con mezcla aleatoria de
 > filas (`services/ml-core/mlcore/ml/validation/kfold.py`). En series de tiempo esto puede producir
@@ -253,6 +291,9 @@ it works the same with `PESO (PRODUCCIÓN)`, `Peso_Recolectado_KG` or `Peso_Perd
   shifted to `t-w .. t-1`, useful for operational inference before the current day's weather exists.
 - `target_lags` (e.g. `[1, 2, 3, 7]`) creates `{target}_lag_{k}` on the configured targets after
   sorting by date. It captures harvest autocorrelation.
+- `drop_zero_targets` (default `false`) removes rows where **every** configured target is `0`, after
+  computing lags and rolling windows over the complete daily series. This reduces zero-inflation
+  without breaking temporal continuity.
 
 **Anti-leakage guardrail:** when `target_lags` is not empty, `cv.scheme` must be `"timeseries"` and
 `cv.gap >= max(target_lags)`. Otherwise the request is rejected with `ValidationFailedError`. This
@@ -276,8 +317,13 @@ honor the same `gap`.
 ```
 
 When `enabled` is `true` and `exogenous_columns` is empty, numeric non-target columns other than the
-date are auto-selected. When `target_columns` is empty, the request's targets are used. Inference
-requires sending exactly the run's `feature_columns`, including the generated temporal columns.
+date are auto-selected. When `target_columns` is empty, the request's targets are used. The run
+persists the resolved configuration, `max_lookback = max(lags + rolling_windows + target_lags)` and
+the last `max_lookback` raw training rows. Inference accepts the run's precomputed
+`feature_columns` (Option A) or just the day's raw covariates (Option B); in the latter case it
+rebuilds the features from the saved history or an explicit `history` payload. With `target_lags`
+and multiple future days, use `mode: "recursive"` (or let `auto` detect missing intermediate
+targets).
 
 > **Temporal validation:** by default cross-validation uses `KFold` with random row shuffling
 > (`services/ml-core/mlcore/ml/validation/kfold.py`). On time series this can yield optimistic

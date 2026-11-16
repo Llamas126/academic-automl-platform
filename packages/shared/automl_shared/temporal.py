@@ -29,10 +29,22 @@ __all__ = [
     "add_temporal_features",
     "assert_causal",
     "lag_features",
+    "max_lookback",
     "rolling_feature",
     "rolling_features",
     "temporal_feature_names",
 ]
+
+
+def max_lookback(config: TemporalFeatureConfig) -> int:
+    """Maximum number of past rows needed to rebuild a feature row.
+
+    Mirrors the configured horizons exactly: ``max(lags + rolling_windows +
+    target_lags)``. The result is persisted with the run so inference can load
+    just enough raw training history.
+    """
+    horizons = [*config.lags, *config.rolling_windows, *config.target_lags]
+    return max(horizons, default=0)
 
 
 def _numeric_series(frame: pd.DataFrame, column: str, role: str) -> pd.Series:
